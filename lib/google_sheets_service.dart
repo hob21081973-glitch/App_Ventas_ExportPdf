@@ -1,128 +1,85 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-
-class Cliente {
-  String codigo;
-  String nombre;
-  String telefono;
-  String direccion;
-
-  Cliente({
-    required this.codigo,
-    required this.nombre,
-    required this.telefono,
-    required this.direccion,
-  });
-
-  factory Cliente.fromJson(List<dynamic> json) {
-    return Cliente(
-      codigo: json[0].toString(),
-      nombre: json[1].toString(),
-      telefono: json.length > 2 ? json[2].toString() : '',
-      direccion: json.length > 3 ? json[3].toString() : '',
-    );
-  }
-}
-
-class Producto {
-  String codigo;
-  String nombre;
-  double precio;
-  int stock;
-
-  Producto({
-    required this.codigo,
-    required this.nombre,
-    required this.precio,
-    required this.stock,
-  });
-
-  factory Producto.fromJson(List<dynamic> json) {
-    return Producto(
-      codigo: json[0].toString(),
-      nombre: json[1].toString(),
-      precio: double.tryParse(json[2].toString()) ?? 0.0,
-      stock: int.tryParse(json[3].toString()) ?? 0,
-    );
-  }
-}
+import 'package:csv/csv.dart';
+import '../models/cliente.dart';
+import '../models/producto.dart';
+import '../models/pedido.dart';
 
 class GoogleSheetsService {
-  // Pega aquí la URL de tu Web App de Google Apps Script
-  static const String webAppUrl = 'https://script.google.com/macros/s/AKfycbyiT2h9i6JyJvfHHk72xEtCEzHNdst5uHtMKfRJH_oXqZqloqiiX-jFmY3fA96JuoY9/exec';
+  // Enlaces CSV para lectura directa ultrarrápida
+  static const String _urlClientesCsv = 
+      'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=0&single=true&output=csv';
+  
+  static const String _urlProductosCsv = 
+      'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=1903712481&single=true&output=csv';
 
-  // --- OBTENER DATOS ---
-  static Future<List<Cliente>> obtenerClientes() async {
+  // Enlace Web App para guardar pedidos
+  static const String _urlScriptExec = 
+      'https://script.google.com/macros/s/AKfycbyiT2h9i6JyJvfHHk72xEtCEzHNdst5uHtMKfRJH_oXqZqloqiiX-jFmY3fA96JuoY9/exec';
+
+  // Obtener Clientes desde CSV público
+  Future<List<Cliente>> getClientes() async {
     try {
-      final res = await http.get(Uri.parse('$webAppUrl?action=getClientes'));
-      if (res.statusCode == 200) {
-        List<dynamic> data = jsonDecode(res.body);
-        return data.where((r) => r.isNotEmpty && r[0].toString().isNotEmpty).map((item) => Cliente.fromJson(item)).toList();
+      final response = await http.get(Uri.parse(_urlClientesCsv));
+      if (response.statusCode == 200) {
+        List<List<dynamic>> csvData = const CsvToListConverter().convert(response.body);
+        List<Cliente> clientes = [];
+        
+        // Omitimos la primera fila (cabecera)
+        for (var i = 1; i < csvData.length; i++) {
+          var row = csvData[i];
+          if (row.isNotEmpty && row[0].toString().trim().isNotEmpty) {
+            clientes.add(Cliente.fromCsvRow(row));
+          }
+        }
+        return clientes;
+      } else {
+        throw Exception('Error al cargar clientes: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error clientes: $e');
+      print('Error en getClientes: $e');
+      return [];
     }
-    return [];
   }
 
-  static Future<List<Producto>> obtenerProductos() async {
+  // Obtener Productos desde CSV público
+  Future<List<Producto>> getProductos() async {
     try {
-      final res = await http.get(Uri.parse('$webAppUrl?action=getProductos'));
-      if (res.statusCode == 200) {
-        List<dynamic> data = jsonDecode(res.body);
-        return data.where((r) => r.isNotEmpty && r[0].toString().isNotEmpty).map((item) => Producto.fromJson(item)).toList();
+      final response = await http.get(Uri.parse(_urlProductosCsv));
+      if (response.statusCode == 200) {
+        List<List<dynamic>> csvData = const CsvToListConverter().convert(response.body);
+        List<Producto> productos = [];
+        
+        // Omitimos la primera fila (cabecera)
+        for (var i = 1; i < csvData.length; i++) {
+          var row = csvData[i];
+          if (row.isNotEmpty && row[0].toString().trim().isNotEmpty) {
+            productos.add(Producto.fromCsvRow(row));
+          }
+        }
+        return productos;
+      } else {
+        throw Exception('Error al cargar productos: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error productos: $e');
+      print('Error en getProductos: $e');
+      return [];
     }
-    return [];
   }
 
-  // --- EDITAR CLIENTE ---
-  static Future<bool> editarCliente(Cliente c) async {
-    final res = await http.post(
-      Uri.parse(webAppUrl),
-      body: jsonEncode({
-        'action': 'editarCliente',
-        'codigo': c.codigo,
-        'nombre': c.nombre,
-        'telefono': c.telefono,
-        'direccion': c.direccion,
-      }),
-    );
-    return res.statusCode == 200;
-  }
+  // Guardar Pedido mediante el Web App /exec
+  Future<bool> guardarPedido(Pedido pedido) async {
+    try {
+      final response = await http.post(
+        Uri.parse(_urlScriptExec),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(pedido.toJson()),
+      );
 
-  // --- ELIMINAR CLIENTE ---
-  static Future<bool> eliminarCliente(String codigo) async {
-    final res = await http.post(
-      Uri.parse(webAppUrl),
-      body: jsonEncode({'action': 'eliminarCliente', 'codigo': codigo}),
-    );
-    return res.statusCode == 200;
-  }
-
-  // --- EDITAR PRODUCTO ---
-  static Future<bool> editarProducto(Producto p) async {
-    final res = await http.post(
-      Uri.parse(webAppUrl),
-      body: jsonEncode({
-        'action': 'editarProducto',
-        'codigo': p.codigo,
-        'nombre': p.nombre,
-        'precio': p.precio,
-        'stock': p.stock,
-      }),
-    );
-    return res.statusCode == 200;
-  }
-
-  // --- ELIMINAR PRODUCTO ---
-  static Future<bool> eliminarProducto(String codigo) async {
-    final res = await http.post(
-      Uri.parse(webAppUrl),
-      body: jsonEncode({'action': 'eliminarProducto', 'codigo': codigo}),
-    );
-    return res.statusCode == 200;
+      return response.statusCode == 200 || response.statusCode == 302;
+    } catch (e) {
+      print('Error al guardar pedido: $e');
+      return false;
+    }
   }
 }
