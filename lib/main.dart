@@ -29,11 +29,25 @@ class PantallaPrincipal extends StatefulWidget {
   State<PantallaPrincipal> createState() => _PantallaPrincipalState();
 }
 
+class ItemVenta {
+  final Producto producto;
+  int cantidad;
+  double get total => producto.precio * cantidad;
+
+  ItemVenta({required this.producto, required this.cantidad});
+}
+
 class _PantallaPrincipalState extends State<PantallaPrincipal> {
-  int _indicePestana = 2; // Iniciar en Clientes por defecto
+  int _indicePestana = 0;
   List<Cliente> clientes = [];
   List<Producto> productos = [];
   bool cargando = false;
+
+  // Variables para la pestaña "Crear Venta"
+  Cliente? clienteSeleccionado;
+  Producto? productoSeleccionado;
+  final TextEditingController txtCantidad = TextEditingController(text: '1');
+  List<ItemVenta> detalleVenta = [];
 
   @override
   void initState() {
@@ -43,17 +57,45 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
 
   Future<void> cargarDatosDesdeSheets() async {
     setState(() => cargando = true);
-    final listaClientes = await GoogleSheetsService.obtenerClientes();
-    final listaProductos = await GoogleSheetsService.obtenerProductos();
+    
+    try {
+      final listaClientes = await GoogleSheetsService.obtenerClientes();
+      final listaProductos = await GoogleSheetsService.obtenerProductos();
+
+      if (mounted) {
+        setState(() {
+          clientes = listaClientes;
+          productos = listaProductos;
+          cargando = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => cargando = false);
+      }
+    }
+  }
+
+  void _agregarProductoAVenta() {
+    if (productoSeleccionado == null) return;
+    int cant = int.tryParse(txtCantidad.text) ?? 1;
+    if (cant <= 0) return;
 
     setState(() {
-      clientes = listaClientes;
-      productos = listaProductos;
-      cargando = false;
+      final index = detalleVenta.indexWhere((item) => item.producto.codigo == productoSeleccionado!.codigo);
+      if (index >= 0) {
+        detalleVenta[index].cantidad += cant;
+      } else {
+        detalleVenta.add(ItemVenta(producto: productoSeleccionado!, cantidad: cant));
+      }
+      productoSeleccionado = null;
+      txtCantidad.text = '1';
     });
   }
 
-  // --- DIÁLOGOS DE EDICIÓN Y ELIMINACIÓN: CLIENTES ---
+  double get totalVenta => detalleVenta.fold(0, (sum, item) => sum + item.total);
+
+  // --- OPCIONES PARA CLIENTES (EDITAR / ELIMINAR) ---
   void _mostrarDialogoEditarCliente(Cliente c) {
     final txtNombre = TextEditingController(text: c.nombre);
     final txtTelefono = TextEditingController(text: c.telefono);
@@ -115,7 +157,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
     );
   }
 
-  // --- DIÁLOGOS DE EDICIÓN Y ELIMINACIÓN: PRODUCTOS ---
+  // --- OPCIONES PARA PRODUCTOS (EDITAR / ELIMINAR) ---
   void _mostrarDialogoEditarProducto(Producto p) {
     final txtNombre = TextEditingController(text: p.nombre);
     final txtPrecio = TextEditingController(text: p.precio.toString());
@@ -179,65 +221,181 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
 
   @override
   Widget build(BuildContext context) {
-    final paginas = [
-      const Center(child: Text('Pantalla Crear')),
-      const Center(child: Text('Pantalla Historial')),
-      
-      // PESTAÑA CLIENTES CON BOTONES EDITAR / ELIMINAR
+    final List<Widget> paginas = [
+      // PESTAÑA 0: CREAR VENTA (CON BUSCADORES DE CLIENTES Y PRODUCTOS)
       cargando
           ? const Center(child: CircularProgressIndicator())
-          : ListView.builder(
-              itemCount: clientes.length,
-              itemBuilder: (context, i) {
-                final c = clientes[i];
-                return ListTile(
-                  leading: CircleAvatar(child: Text(c.codigo)),
-                  title: Text(c.nombre),
-                  subtitle: Text('Teléfono: ${c.telefono}'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Buscar / Seleccionar Cliente', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<Cliente>(
+                    value: clienteSeleccionado,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person),
+                      hintText: 'Seleccione un cliente',
+                    ),
+                    isExpanded: true,
+                    items: clientes.map((c) {
+                      return DropdownMenuItem<Cliente>(
+                        value: c,
+                        child: Text('${c.nombre} (${c.codigo})'),
+                      );
+                    }).toList(),
+                    onChanged: (val) => setState(() => clienteSeleccionado = val),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text('Buscar / Seleccionar Producto', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 8),
+                  Row(
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
-                        onPressed: () => _mostrarDialogoEditarCliente(c),
+                      Expanded(
+                        flex: 3,
+                        child: DropdownButtonFormField<Producto>(
+                          value: productoSeleccionado,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.shopping_bag),
+                            hintText: 'Seleccione un producto',
+                          ),
+                          isExpanded: true,
+                          items: productos.map((p) {
+                            return DropdownMenuItem<Producto>(
+                              value: p,
+                              child: Text('${p.nombre} - L ${p.precio.toStringAsFixed(2)}'),
+                            );
+                          }).toList(),
+                          onChanged: (val) => setState(() => productoSeleccionado = val),
+                        ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _confirmarEliminarCliente(c),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 1,
+                        child: TextField(
+                          controller: txtCantidad,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            labelText: 'Cant.',
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                );
-              },
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.add),
+                      label: const Text('AGREGAR A LA VENTA'),
+                      style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                      onPressed: _agregarProductoAVenta,
+                    ),
+                  ),
+                  const Divider(height: 30, thickness: 2),
+                  const Text('Detalle de la Venta', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 8),
+                  detalleVenta.isEmpty
+                      ? const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No hay productos agregados')))
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: detalleVenta.length,
+                          itemBuilder: (ctx, i) {
+                            final item = detalleVenta[i];
+                            return Card(
+                              child: ListTile(
+                                title: Text(item.producto.nombre),
+                                subtitle: Text('${item.cantidad} x L ${item.producto.precio.toStringAsFixed(2)} = L ${item.total.toStringAsFixed(2)}'),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () {
+                                    setState(() {
+                                      detalleVenta.removeAt(i);
+                                    });
+                                  },
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('TOTAL:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text('L ${totalVenta.toStringAsFixed(2)}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
+                    ],
+                  ),
+                ],
+              ),
             ),
 
-      // PESTAÑA PRODUCTOS CON BOTONES EDITAR / ELIMINAR
+      const Center(child: Text('Pantalla Historial')),
+
+      // PESTAÑA CLIENTES CON ICONOS DE EDITAR Y ELIMINAR
       cargando
           ? const Center(child: CircularProgressIndicator())
-          : ListView.builder(
-              itemCount: productos.length,
-              itemBuilder: (context, i) {
-                final p = productos[i];
-                return ListTile(
-                  leading: CircleAvatar(child: Text(p.codigo)),
-                  title: Text(p.nombre),
-                  subtitle: Text('L ${p.precio.toStringAsFixed(2)}'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
-                        onPressed: () => _mostrarDialogoEditarProducto(p),
+          : clientes.isEmpty
+              ? const Center(child: Text('No hay clientes registrados'))
+              : ListView.builder(
+                  itemCount: clientes.length,
+                  itemBuilder: (context, i) {
+                    final c = clientes[i];
+                    return ListTile(
+                      leading: CircleAvatar(child: Text(c.codigo)),
+                      title: Text(c.nombre),
+                      subtitle: Text('Teléfono: ${c.telefono}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: Colors.blue),
+                            onPressed: () => _mostrarDialogoEditarCliente(c),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _confirmarEliminarCliente(c),
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _confirmarEliminarProducto(p),
+                    );
+                  },
+                ),
+
+      // PESTAÑA PRODUCTOS CON ICONOS DE EDITAR Y ELIMINAR
+      cargando
+          ? const Center(child: CircularProgressIndicator())
+          : productos.isEmpty
+              ? const Center(child: Text('No hay productos registrados'))
+              : ListView.builder(
+                  itemCount: productos.length,
+                  itemBuilder: (context, i) {
+                    final p = productos[i];
+                    return ListTile(
+                      leading: CircleAvatar(child: Text(p.codigo)),
+                      title: Text(p.nombre),
+                      subtitle: Text('L ${p.precio.toStringAsFixed(2)}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: Colors.blue),
+                            onPressed: () => _mostrarDialogoEditarProducto(p),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _confirmarEliminarProducto(p),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                    );
+                  },
+                ),
 
       const Center(child: Text('Pantalla Resumen')),
       const Center(child: Text('Pantalla Productos Barcode')),
