@@ -1,84 +1,86 @@
+import 'dart0convert'; // Nota: Si Dart da advertencia usa import 'dart:convert';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:csv/csv.dart';
-import '../models/cliente.dart';
-import '../models/producto.dart';
-import '../models/pedido.dart';
 
 class GoogleSheetsService {
-  // Enlaces CSV para lectura directa ultrarrápida
+  // Enlaces CSV directos
   static const String _urlClientesCsv = 
       'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=0&single=true&output=csv';
   
   static const String _urlProductosCsv = 
       'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=1903712481&single=true&output=csv';
 
-  // Enlace Web App para guardar pedidos
+  // Enlace Web App
   static const String _urlScriptExec = 
       'https://script.google.com/macros/s/AKfycbyiT2h9i6JyJvfHHk72xEtCEzHNdst5uHtMKfRJH_oXqZqloqiiX-jFmY3fA96JuoY9/exec';
 
   // Obtener Clientes desde CSV público
-  Future<List<Cliente>> getClientes() async {
+  Future<List<Map<String, dynamic>>> getClientes() async {
     try {
       final response = await http.get(Uri.parse(_urlClientesCsv));
       if (response.statusCode == 200) {
-        List<List<dynamic>> csvData = const CsvToListConverter().convert(response.body);
-        List<Cliente> clientes = [];
+        List<String> lines = const LineSplitter().convert(response.body);
+        List<Map<String, dynamic>> clientes = [];
         
-        // Omitimos la primera fila (cabecera)
-        for (var i = 1; i < csvData.length; i++) {
-          var row = csvData[i];
-          if (row.isNotEmpty && row[0].toString().trim().isNotEmpty) {
-            clientes.add(Cliente.fromCsvRow(row));
+        for (var i = 1; i < lines.length; i++) {
+          if (lines[i].trim().isEmpty) continue;
+          List<String> values = lines[i].split(',');
+          if (values.isNotEmpty) {
+            clientes.add({
+              'id': values.length > 0 ? values[0].trim() : '',
+              'nombre': values.length > 1 ? values[1].trim() : '',
+              'telefono': values.length > 2 ? values[2].trim() : '',
+              'direccion': values.length > 3 ? values[3].trim() : '',
+            });
           }
         }
         return clientes;
-      } else {
-        throw Exception('Error al cargar clientes: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error en getClientes: $e');
-      return [];
+      print('Error clientes: $e');
     }
+    return [];
   }
 
   // Obtener Productos desde CSV público
-  Future<List<Producto>> getProductos() async {
+  Future<List<Map<String, dynamic>>> getProductos() async {
     try {
       final response = await http.get(Uri.parse(_urlProductosCsv));
       if (response.statusCode == 200) {
-        List<List<dynamic>> csvData = const CsvToListConverter().convert(response.body);
-        List<Producto> productos = [];
+        List<String> lines = const LineSplitter().convert(response.body);
+        List<Map<String, dynamic>> productos = [];
         
-        // Omitimos la primera fila (cabecera)
-        for (var i = 1; i < csvData.length; i++) {
-          var row = csvData[i];
-          if (row.isNotEmpty && row[0].toString().trim().isNotEmpty) {
-            productos.add(Producto.fromCsvRow(row));
+        for (var i = 1; i < lines.length; i++) {
+          if (lines[i].trim().isEmpty) continue;
+          List<String> values = lines[i].split(',');
+          if (values.isNotEmpty) {
+            productos.add({
+              'id': values.length > 0 ? values[0].trim() : '',
+              'nombre': values.length > 1 ? values[1].trim() : '',
+              'precio': values.length > 2 ? double.tryParse(values[2].trim()) ?? 0.0 : 0.0,
+              'stock': values.length > 3 ? int.tryParse(values[3].trim()) ?? 0 : 0,
+            });
           }
         }
         return productos;
-      } else {
-        throw Exception('Error al cargar productos: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error en getProductos: $e');
-      return [];
+      print('Error productos: $e');
     }
+    return [];
   }
 
-  // Guardar Pedido mediante el Web App /exec
-  Future<bool> guardarPedido(Pedido pedido) async {
+  // Guardar Pedido vía Apps Script
+  Future<bool> guardarPedido(Map<String, dynamic> pedidoData) async {
     try {
       final response = await http.post(
         Uri.parse(_urlScriptExec),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(pedido.toJson()),
+        body: jsonEncode(pedidoData),
       );
-
       return response.statusCode == 200 || response.statusCode == 302;
     } catch (e) {
-      print('Error al guardar pedido: $e');
+      print('Error guardar pedido: $e');
       return false;
     }
   }
