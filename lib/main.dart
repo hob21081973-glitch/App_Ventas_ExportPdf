@@ -77,7 +77,12 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
   }
 
   void _agregarProductoAVenta() {
-    if (productoSeleccionado == null) return;
+    if (productoSeleccionado == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor seleccione un producto')),
+      );
+      return;
+    }
     int cant = int.tryParse(txtCantidad.text) ?? 1;
     if (cant <= 0) return;
 
@@ -94,6 +99,56 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
   }
 
   double get totalVenta => detalleVenta.fold(0, (sum, item) => sum + item.total);
+
+  void _guardarPedido() async {
+    if (clienteSeleccionado == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor seleccione un cliente')),
+      );
+      return;
+    }
+    if (detalleVenta.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Agregue al menos un producto a la venta')),
+      );
+      return;
+    }
+
+    setState(() => cargando = true);
+
+    // Preparar objeto para enviar
+    final pedidoData = {
+      'cliente': clienteSeleccionado!.nombre,
+      'codigoCliente': clienteSeleccionado!.codigo,
+      'total': totalVenta,
+      'items': detalleVenta.map((item) => {
+        'codigo': item.producto.codigo,
+        'nombre': item.producto.nombre,
+        'cantidad': item.cantidad,
+        'precio': item.producto.precio,
+        'total': item.total,
+      }).toList(),
+    };
+
+    bool exito = await GoogleSheetsService.crearPedido(pedidoData);
+
+    setState(() => cargando = false);
+
+    if (exito) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('¡Pedido creado con éxito!')),
+      );
+      setState(() {
+        detalleVenta.clear();
+        clienteSeleccionado = null;
+      });
+      await cargarDatosDesdeSheets();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error al guardar el pedido')),
+      );
+    }
+  }
 
   // --- OPCIONES PARA CLIENTES (EDITAR / ELIMINAR) ---
   void _mostrarDialogoEditarCliente(Cliente c) {
@@ -222,7 +277,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
   @override
   Widget build(BuildContext context) {
     final List<Widget> paginas = [
-      // PESTAÑA 0: CREAR VENTA (CON BUSCADORES DE CLIENTES Y PRODUCTOS)
+      // PESTAÑA 0: CREAR VENTA
       cargando
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -331,13 +386,26 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
                       Text('L ${totalVenta.toStringAsFixed(2)}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
                     ],
                   ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.check_circle),
+                      label: const Text('GUARDAR PEDIDO'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: _guardarPedido,
+                    ),
+                  ),
                 ],
               ),
             ),
 
       const Center(child: Text('Pantalla Historial')),
 
-      // PESTAÑA CLIENTES CON ICONOS DE EDITAR Y ELIMINAR
+      // PESTAÑA CLIENTES
       cargando
           ? const Center(child: CircularProgressIndicator())
           : clientes.isEmpty
@@ -367,7 +435,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
                   },
                 ),
 
-      // PESTAÑA PRODUCTOS CON ICONOS DE EDITAR Y ELIMINAR
+      // PESTAÑA PRODUCTOS
       cargando
           ? const Center(child: CircularProgressIndicator())
           : productos.isEmpty
