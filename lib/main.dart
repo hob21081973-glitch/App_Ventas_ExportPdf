@@ -1,500 +1,711 @@
 import 'package:flutter/material.dart';
-import 'google_sheets_service.dart';
+import 'services/google_sheets_service.dart';
 
 void main() {
-  runApp(const MiAppVentas());
+  runApp(const VentasApp());
 }
 
-class MiAppVentas extends StatelessWidget {
-  const MiAppVentas({super.key});
+class VentasApp extends StatelessWidget {
+  const VentasApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      title: 'Ventas Sport PDF',
       debugShowCheckedModeBanner: false,
-      title: 'App Ventas ExportPdf',
       theme: ThemeData(
         primarySwatch: Colors.indigo,
-        useMaterial3: false,
+        useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFFF5F6FA),
       ),
-      home: const PantallaPrincipal(),
+      home: const MainPage(),
     );
   }
 }
 
-class PantallaPrincipal extends StatefulWidget {
-  const PantallaPrincipal({super.key});
+class MainPage extends StatefulWidget {
+  const MainPage({super.key});
 
   @override
-  State<PantallaPrincipal> createState() => _PantallaPrincipalState();
+  State<MainPage> createState() => _MainPageState();
 }
 
-class ItemVenta {
-  final Producto producto;
-  int cantidad;
-  double get total => producto.precio * cantidad;
+class _MainPageState extends State<MainPage> {
+  int _selectedIndex = 0;
 
-  ItemVenta({required this.producto, required this.cantidad});
-}
+  final GoogleSheetsService _sheetsService = GoogleSheetsService();
 
-class _PantallaPrincipalState extends State<PantallaPrincipal> {
-  int _indicePestana = 0;
-  List<Cliente> clientes = [];
-  List<Producto> productos = [];
-  bool cargando = false;
+  // Datos globales cargados desde Google Sheets
+  List<Map<String, dynamic>> _clientes = [];
+  List<Map<String, dynamic>> _productos = [];
+  List<Map<String, dynamic>> _pedidosGuardados = [];
 
-  // Variables para la pestaña "Crear Venta"
-  Cliente? clienteSeleccionado;
-  Producto? productoSeleccionado;
-  final TextEditingController txtCantidad = TextEditingController(text: '1');
-  List<ItemVenta> detalleVenta = [];
+  bool _cargandoDatos = false;
 
   @override
   void initState() {
     super.initState();
-    cargarDatosDesdeSheets();
+    _cargarDatosIniciales();
   }
 
-  Future<void> cargarDatosDesdeSheets() async {
-    setState(() => cargando = true);
-    
+  Future<void> _cargarDatosIniciales() async {
+    setState(() => _cargandoDatos = true);
     try {
-      final listaClientes = await GoogleSheetsService.obtenerClientes();
-      final listaProductos = await GoogleSheetsService.obtenerProductos();
+      final clientesData = await _sheetsService.getClientes();
+      final productosData = await _sheetsService.getProductos();
 
-      if (mounted) {
-        setState(() {
-          clientes = listaClientes;
-          productos = listaProductos;
-          cargando = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => cargando = false);
-      }
-    }
-  }
-
-  void _agregarProductoAVenta() {
-    if (productoSeleccionado == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor seleccione un producto')),
-      );
-      return;
-    }
-    int cant = int.tryParse(txtCantidad.text) ?? 1;
-    if (cant <= 0) return;
-
-    setState(() {
-      final index = detalleVenta.indexWhere((item) => item.producto.codigo == productoSeleccionado!.codigo);
-      if (index >= 0) {
-        detalleVenta[index].cantidad += cant;
-      } else {
-        detalleVenta.add(ItemVenta(producto: productoSeleccionado!, cantidad: cant));
-      }
-      productoSeleccionado = null;
-      txtCantidad.text = '1';
-    });
-  }
-
-  double get totalVenta => detalleVenta.fold(0, (sum, item) => sum + item.total);
-
-  void _guardarPedido() async {
-    if (clienteSeleccionado == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor seleccione un cliente')),
-      );
-      return;
-    }
-    if (detalleVenta.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Agregue al menos un producto a la venta')),
-      );
-      return;
-    }
-
-    setState(() => cargando = true);
-
-    // Preparar objeto para enviar
-    final pedidoData = {
-      'cliente': clienteSeleccionado!.nombre,
-      'codigoCliente': clienteSeleccionado!.codigo,
-      'total': totalVenta,
-      'items': detalleVenta.map((item) => {
-        'codigo': item.producto.codigo,
-        'nombre': item.producto.nombre,
-        'cantidad': item.cantidad,
-        'precio': item.producto.precio,
-        'total': item.total,
-      }).toList(),
-    };
-
-    bool exito = await GoogleSheetsService.crearPedido(pedidoData);
-
-    setState(() => cargando = false);
-
-    if (exito) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('¡Pedido creado con éxito!')),
-      );
       setState(() {
-        detalleVenta.clear();
-        clienteSeleccionado = null;
+        _clientes = clientesData;
+        _productos = productosData;
+        _cargandoDatos = false;
       });
-      await cargarDatosDesdeSheets();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error al guardar el pedido')),
-      );
+    } catch (e) {
+      setState(() => _cargandoDatos = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al cargar datos iniciales: $e')),
+        );
+      }
     }
-  }
-
-  // --- OPCIONES PARA CLIENTES (EDITAR / ELIMINAR) ---
-  void _mostrarDialogoEditarCliente(Cliente c) {
-    final txtNombre = TextEditingController(text: c.nombre);
-    final txtTelefono = TextEditingController(text: c.telefono);
-    final txtDireccion = TextEditingController(text: c.direccion);
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Editar Cliente (${c.codigo})'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: txtNombre, decoration: const InputDecoration(labelText: 'Nombre')),
-              TextField(controller: txtTelefono, decoration: const InputDecoration(labelText: 'Teléfono')),
-              TextField(controller: txtDireccion, decoration: const InputDecoration(labelText: 'Dirección')),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              c.nombre = txtNombre.text;
-              c.telefono = txtTelefono.text;
-              c.direccion = txtDireccion.text;
-              setState(() => cargando = true);
-              await GoogleSheetsService.editarCliente(c);
-              await cargarDatosDesdeSheets();
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmarEliminarCliente(Cliente c) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar Cliente'),
-        content: Text('¿Deseas eliminar a ${c.nombre}?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              setState(() => cargando = true);
-              await GoogleSheetsService.eliminarCliente(c.codigo);
-              await cargarDatosDesdeSheets();
-            },
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- OPCIONES PARA PRODUCTOS (EDITAR / ELIMINAR) ---
-  void _mostrarDialogoEditarProducto(Producto p) {
-    final txtNombre = TextEditingController(text: p.nombre);
-    final txtPrecio = TextEditingController(text: p.precio.toString());
-    final txtStock = TextEditingController(text: p.stock.toString());
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Editar Producto (${p.codigo})'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: txtNombre, decoration: const InputDecoration(labelText: 'Nombre')),
-              TextField(controller: txtPrecio, decoration: const InputDecoration(labelText: 'Precio'), keyboardType: TextInputType.number),
-              TextField(controller: txtStock, decoration: const InputDecoration(labelText: 'Stock'), keyboardType: TextInputType.number),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              p.nombre = txtNombre.text;
-              p.precio = double.tryParse(txtPrecio.text) ?? p.precio;
-              p.stock = int.tryParse(txtStock.text) ?? p.stock;
-              setState(() => cargando = true);
-              await GoogleSheetsService.editarProducto(p);
-              await cargarDatosDesdeSheets();
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmarEliminarProducto(Producto p) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar Producto'),
-        content: Text('¿Deseas eliminar el producto ${p.nombre}?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              setState(() => cargando = true);
-              await GoogleSheetsService.eliminarProducto(p.codigo);
-              await cargarDatosDesdeSheets();
-            },
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final List<Widget> paginas = [
-      // PESTAÑA 0: CREAR VENTA
-      cargando
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Buscar / Seleccionar Cliente', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<Cliente>(
-                    value: clienteSeleccionado,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.person),
-                      hintText: 'Seleccione un cliente',
-                    ),
-                    isExpanded: true,
-                    items: clientes.map((c) {
-                      return DropdownMenuItem<Cliente>(
-                        value: c,
-                        child: Text('${c.nombre} (${c.codigo})'),
-                      );
-                    }).toList(),
-                    onChanged: (val) => setState(() => clienteSeleccionado = val),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text('Buscar / Seleccionar Producto', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: DropdownButtonFormField<Producto>(
-                          value: productoSeleccionado,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.shopping_bag),
-                            hintText: 'Seleccione un producto',
-                          ),
-                          isExpanded: true,
-                          items: productos.map((p) {
-                            return DropdownMenuItem<Producto>(
-                              value: p,
-                              child: Text('${p.nombre} - L ${p.precio.toStringAsFixed(2)}'),
-                            );
-                          }).toList(),
-                          onChanged: (val) => setState(() => productoSeleccionado = val),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        flex: 1,
-                        child: TextField(
-                          controller: txtCantidad,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            labelText: 'Cant.',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.add),
-                      label: const Text('AGREGAR A LA VENTA'),
-                      style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
-                      onPressed: _agregarProductoAVenta,
-                    ),
-                  ),
-                  const Divider(height: 30, thickness: 2),
-                  const Text('Detalle de la Venta', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 8),
-                  detalleVenta.isEmpty
-                      ? const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No hay productos agregados')))
-                      : ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: detalleVenta.length,
-                          itemBuilder: (ctx, i) {
-                            final item = detalleVenta[i];
-                            return Card(
-                              child: ListTile(
-                                title: Text(item.producto.nombre),
-                                subtitle: Text('${item.cantidad} x L ${item.producto.precio.toStringAsFixed(2)} = L ${item.total.toStringAsFixed(2)}'),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red),
-                                  onPressed: () {
-                                    setState(() {
-                                      detalleVenta.removeAt(i);
-                                    });
-                                  },
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('TOTAL:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      Text('L ${totalVenta.toStringAsFixed(2)}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.check_circle),
-                      label: const Text('GUARDAR PEDIDO'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      onPressed: _guardarPedido,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-      const Center(child: Text('Pantalla Historial')),
-
-      // PESTAÑA CLIENTES
-      cargando
-          ? const Center(child: CircularProgressIndicator())
-          : clientes.isEmpty
-              ? const Center(child: Text('No hay clientes registrados'))
-              : ListView.builder(
-                  itemCount: clientes.length,
-                  itemBuilder: (context, i) {
-                    final c = clientes[i];
-                    return ListTile(
-                      leading: CircleAvatar(child: Text(c.codigo)),
-                      title: Text(c.nombre),
-                      subtitle: Text('Teléfono: ${c.telefono}'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.blue),
-                            onPressed: () => _mostrarDialogoEditarCliente(c),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _confirmarEliminarCliente(c),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-
-      // PESTAÑA PRODUCTOS
-      cargando
-          ? const Center(child: CircularProgressIndicator())
-          : productos.isEmpty
-              ? const Center(child: Text('No hay productos registrados'))
-              : ListView.builder(
-                  itemCount: productos.length,
-                  itemBuilder: (context, i) {
-                    final p = productos[i];
-                    return ListTile(
-                      leading: CircleAvatar(child: Text(p.codigo)),
-                      title: Text(p.nombre),
-                      subtitle: Text('L ${p.precio.toStringAsFixed(2)}'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.blue),
-                            onPressed: () => _mostrarDialogoEditarProducto(p),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _confirmarEliminarProducto(p),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-
-      const Center(child: Text('Pantalla Resumen')),
-      const Center(child: Text('Pantalla Productos Barcode')),
-      const Center(child: Text('Pantalla PDF')),
+      _buildTabClientes(),
+      _buildTabProductos(),
+      _buildTabCrearPedido(),
+      _buildTabHistorialPedidos(),
+      _buildTabExportarPdf(),
+      _buildTabConfiguracion(),
     ];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('App Ventas ExportPdf'),
+        title: const Text(
+          'Ventas Sport PDF',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: cargarDatosDesdeSheets,
-          )
+            tooltip: 'Recargar Datos',
+            onPressed: _cargarDatosIniciales,
+          ),
         ],
       ),
-      body: paginas[_indicePestana],
+      body: _cargandoDatos
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Cargando clientes y productos...'),
+                ],
+              ),
+            )
+          : IndexedStack(
+              index: _selectedIndex,
+              children: paginas,
+            ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _indicePestana,
-        onTap: (index) => setState(() => _indicePestana = index),
+        currentIndex: _selectedIndex,
+        onTap: (index) => setState(() => _selectedIndex = index),
         type: BottomNavigationBarType.fixed,
+        selectedItemColor: Colors.indigo,
+        unselectedItemColor: Colors.grey,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Crear'),
-          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'Historial'),
-          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Clientes'),
-          BottomNavigationBarItem(icon: Icon(Icons.inventory_2), label: 'Productos'),
-          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Resumen'),
-          BottomNavigationBarItem(icon: Icon(Icons.analytics), label: 'Prod...'),
-          BottomNavigationBarItem(icon: Icon(Icons.picture_as_pdf), label: 'PDF'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.people),
+            label: 'Clientes',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.inventory_2),
+            label: 'Productos',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.add_shopping_cart),
+            label: 'Crear Pedido',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.receipt_long),
+            label: 'Pedidos',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.picture_as_pdf),
+            label: 'Exportar PDF',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Ajustes',
+          ),
         ],
       ),
+    );
+  }
+
+  // ==========================================
+  // PESTAÑA 1: CLIENTES
+  // ==========================================
+  Widget _buildTabClientes() {
+    return Padding(
+      padding: const EdgeInsets.all(12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Directorio de Clientes (${_clientes.length})',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: _clientes.isEmpty
+                ? const Center(child: Text('No hay clientes disponibles'))
+                : ListView.builder(
+                    itemCount: _clientes.length,
+                    itemBuilder: (context, index) {
+                      final c = _clientes[index];
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            child: Text(
+                              (c['nombre'] != null && c['nombre'].toString().isNotEmpty)
+                                  ? c['nombre'].toString()[0].toUpperCase()
+                                  : 'C',
+                            ),
+                          ),
+                          title: Text(c['nombre'] ?? 'Sin Nombre'),
+                          subtitle: Text('Tel: ${c['telefono']} | Dir: ${c['direccion']}'),
+                          trailing: Text('ID: ${c['id']}'),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // PESTAÑA 2: PRODUCTOS
+  // ==========================================
+  Widget _buildTabProductos() {
+    return Padding(
+      padding: const EdgeInsets.all(12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Catálogo de Productos (${_productos.length})',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: _productos.isEmpty
+                ? const Center(child: Text('No hay productos disponibles'))
+                : ListView.builder(
+                    itemCount: _productos.length,
+                    itemBuilder: (context, index) {
+                      final p = _productos[index];
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        child: ListTile(
+                          leading: const Icon(Icons.shopping_bag, color: Colors.indigo),
+                          title: Text(p['nombre'] ?? 'Sin Nombre'),
+                          subtitle: Text('Stock: ${p['stock']} unidades'),
+                          trailing: Text(
+                            'L. ${(p['precio'] ?? 0.0).toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // PESTAÑA 3: CREAR PEDIDO (CON BUSCADORES)
+  // ==========================================
+  Map<String, dynamic>? _clienteSeleccionado;
+  final List<Map<String, dynamic>> _itemsPedido = [];
+  bool _guardandoPedido = false;
+
+  Widget _buildTabCrearPedido() {
+    double subtotal = 0;
+    for (var item in _itemsPedido) {
+      subtotal += (item['precio'] * item['cantidad']);
+    }
+    double isv = subtotal * 0.15;
+    double total = subtotal + isv;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Nuevo Pedido',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+
+          // Seleccionar Cliente
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Cliente:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text(
+                          _clienteSeleccionado == null
+                              ? 'Ningún cliente seleccionado'
+                              : '${_clienteSeleccionado!['nombre']} (${_clienteSeleccionado!['telefono']})',
+                          style: TextStyle(
+                            color: _clienteSeleccionado == null ? Colors.red : Colors.indigo,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _abrirBuscadorCliente,
+                    icon: const Icon(Icons.search),
+                    label: const Text('Buscar'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Agregar Productos
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Items del Pedido:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ElevatedButton.icon(
+                onPressed: _abrirBuscadorProducto,
+                icon: const Icon(Icons.add),
+                label: const Text('Agregar Producto'),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+
+          // Lista de Items Agregados
+          _itemsPedido.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: Center(child: Text('No has agregado productos al pedido.')),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _itemsPedido.length,
+                  itemBuilder: (context, index) {
+                    final item = _itemsPedido[index];
+                    return Card(
+                      child: ListTile(
+                        title: Text(item['nombre']),
+                        subtitle: Text('Cant: ${item['cantidad']} x L. ${item['precio']}'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'L. ${(item['precio'] * item['cantidad']).toStringAsFixed(2)}',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () {
+                                setState(() {
+                                  _itemsPedido.removeAt(index);
+                                });
+                              },
+                            )
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+          const Divider(height: 30),
+
+          // Resumen de Totales
+          Card(
+            color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    const Text('Subtotal:'),
+                    Text('L. ${subtotal.toStringAsFixed(2)}'),
+                  ]),
+                  const SizedBox(height: 4),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    const Text('ISV (15%):'),
+                    Text('L. ${isv.toStringAsFixed(2)}'),
+                  ]),
+                  const Divider(),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    const Text('TOTAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                    Text('L. ${total.toStringAsFixed(2)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.indigo)),
+                  ]),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Botón Guardar Pedido
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              icon: _guardandoPedido
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white))
+                  : const Icon(Icons.cloud_upload),
+              label: Text(_guardandoPedido ? 'Guardando...' : 'GUARDAR PEDIDO EN GOOGLE SHEETS'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              onPressed: _guardandoPedido ? null : _enviarPedido,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Modal de Búsqueda de Clientes
+  void _abrirBuscadorCliente() {
+    String filtro = '';
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final listaFiltrada = _clientes.where((c) {
+              final nombre = (c['nombre'] ?? '').toString().toLowerCase();
+              return nombre.contains(filtro.toLowerCase());
+            }).toList();
+
+            return AlertDialog(
+              title: const Text('Buscar Cliente'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      decoration: const InputDecoration(
+                        hintText: 'Escribe para buscar...',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                      onChanged: (val) {
+                        setModalState(() => filtro = val);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: listaFiltrada.length,
+                        itemBuilder: (context, index) {
+                          final c = listaFiltrada[index];
+                          return ListTile(
+                            title: Text(c['nombre'] ?? ''),
+                            subtitle: Text(c['telefono'] ?? ''),
+                            onTap: () {
+                              setState(() => _clienteSeleccionado = c);
+                              Navigator.pop(context);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cerrar'),
+                )
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Modal de Búsqueda de Productos
+  void _abrirBuscadorProducto() {
+    String filtro = '';
+    int cantidad = 1;
+    Map<String, dynamic>? prodSeleccionado;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final listaFiltrada = _productos.where((p) {
+              final nombre = (p['nombre'] ?? '').toString().toLowerCase();
+              return nombre.contains(filtro.toLowerCase());
+            }).toList();
+
+            return AlertDialog(
+              title: const Text('Seleccionar Producto'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      decoration: const InputDecoration(
+                        hintText: 'Nombre de producto...',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                      onChanged: (val) {
+                        setModalState(() => filtro = val);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: listaFiltrada.length,
+                        itemBuilder: (context, index) {
+                          final p = listaFiltrada[index];
+                          final seleccionado = prodSeleccionado == p;
+                          return ListTile(
+                            tileColor: seleccionado ? Colors.indigo.shade50 : null,
+                            title: Text(p['nombre'] ?? ''),
+                            subtitle: Text('Precio: L. ${p['precio']}'),
+                            onTap: () {
+                              setModalState(() => prodSeleccionado = p);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    if (prodSeleccionado != null) ...[
+                      const Divider(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text('Cantidad: '),
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: cantidad > 1 ? () => setModalState(() => cantidad--) : null,
+                          ),
+                          Text('$cantidad', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: () => setModalState(() => cantidad++),
+                          ),
+                        ],
+                      )
+                    ]
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: prodSeleccionado == null
+                      ? null
+                      : () {
+                          setState(() {
+                            _itemsPedido.add({
+                              'id': prodSeleccionado!['id'],
+                              'nombre': prodSeleccionado!['nombre'],
+                              'precio': prodSeleccionado!['precio'],
+                              'cantidad': cantidad,
+                            });
+                          });
+                          Navigator.pop(context);
+                        },
+                  child: const Text('Agregar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Guardar/Enviar Pedido
+  Future<void> _enviarPedido() async {
+    if (_clienteSeleccionado == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor selecciona un cliente.')),
+      );
+      return;
+    }
+
+    if (_itemsPedido.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Agrega al menos un producto al pedido.')),
+      );
+      return;
+    }
+
+    setState(() => _guardandoPedido = true);
+
+    double subtotal = 0;
+    for (var item in _itemsPedido) {
+      subtotal += (item['precio'] * item['cantidad']);
+    }
+
+    final payload = {
+      'cliente': _clienteSeleccionado!['nombre'],
+      'telefono': _clienteSeleccionado!['telefono'],
+      'items': _itemsPedido,
+      'total': subtotal * 1.15,
+      'fecha': DateTime.now().toIso8601String(),
+    };
+
+    final exito = await _sheetsService.guardarPedido(payload);
+
+    setState(() => _guardandoPedido = false);
+
+    if (exito) {
+      _pedidosGuardados.add(payload);
+      setState(() {
+        _itemsPedido.clear();
+        _clienteSeleccionado = null;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('¡Pedido guardado exitosamente en Google Sheets!'), backgroundColor: Colors.green),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al enviar el pedido. Intenta de nuevo.'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  // ==========================================
+  // PESTAÑA 4: HISTORIAL DE PEDIDOS
+  // ==========================================
+  Widget _buildTabHistorialPedidos() {
+    return Padding(
+      padding: const EdgeInsets.all(12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Pedidos Registrados (${_pedidosGuardados.length})',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: _pedidosGuardados.isEmpty
+                ? const Center(child: Text('No se han guardado pedidos en esta sesión.'))
+                : ListView.builder(
+                    itemCount: _pedidosGuardados.length,
+                    itemBuilder: (context, index) {
+                      final p = _pedidosGuardados[index];
+                      return Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.receipt, color: Colors.green),
+                          title: Text('Cliente: ${p['cliente']}'),
+                          subtitle: Text('Items: ${(p['items'] as List).length} productos'),
+                          trailing: Text(
+                            'L. ${(p['total'] as double).toStringAsFixed(2)}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // PESTAÑA 5: EXPORTAR PDF
+  // ==========================================
+  Widget _buildTabExportarPdf() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.picture_as_pdf, size: 80, color: Colors.indigo),
+          SizedBox(height: 16),
+          Text(
+            'Módulo Exportar PDF',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 8),
+          Text('Los reportes y facturas PDF se generarán directamente aquí.'),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // PESTAÑA 6: CONFIGURACIÓN
+  // ==========================================
+  Widget _buildTabConfiguracion() {
+    return ListView(
+      padding: const EdgeInsets.all(16.0),
+      children: [
+        const Text(
+          'Ajustes de la Aplicación',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+        ListTile(
+          leading: const Icon(Icons.sync),
+          title: const Text('Estado de la Conexión'),
+          subtitle: const Text('Conectado a Google Sheets por CSV directo'),
+          trailing: const Icon(Icons.check_circle, color: Colors.green),
+        ),
+        const Divider(),
+        ListTile(
+          leading: const Icon(Icons.info_outline),
+          title: const Text('Versión de la App'),
+          subtitle: const Text('v1.0.0 (Sport PDF Edition)'),
+        ),
+      ],
     );
   }
 }
