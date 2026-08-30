@@ -1,4 +1,4 @@
-import 'dart0convert'; // Nota: Si Dart da advertencia usa import 'dart:convert';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class GoogleSheetsService {
@@ -13,7 +13,7 @@ class GoogleSheetsService {
   static const String _urlScriptExec = 
       'https://script.google.com/macros/s/AKfycbyiT2h9i6JyJvfHHk72xEtCEzHNdst5uHtMKfRJH_oXqZqloqiiX-jFmY3fA96JuoY9/exec';
 
-  // Obtener Clientes desde CSV público
+  // Obtener Clientes (Parsea CSV manualmente de forma robusta)
   Future<List<Map<String, dynamic>>> getClientes() async {
     try {
       final response = await http.get(Uri.parse(_urlClientesCsv));
@@ -41,7 +41,7 @@ class GoogleSheetsService {
     return [];
   }
 
-  // Obtener Productos desde CSV público
+  // Obtener Productos (Parsea CSV)
   Future<List<Map<String, dynamic>>> getProductos() async {
     try {
       final response = await http.get(Uri.parse(_urlProductosCsv));
@@ -69,7 +69,7 @@ class GoogleSheetsService {
     return [];
   }
 
-  // Guardar Pedido vía Apps Script
+  // Guardar Pedido
   Future<bool> guardarPedido(Map<String, dynamic> pedidoData) async {
     try {
       final response = await http.post(
