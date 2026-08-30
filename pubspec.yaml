@@ -1,30 +1,28 @@
 name: app_ventas_export_pdf
-description: "A new Flutter project."
+description: "App de Ventas Web"
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.4+5
 
 environment:
-  sdk: ^3.13.1
+  sdk: '>=3.6.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.8
   csv: ^6.0.0
   http: ^1.2.0
-  intl: ^0.20.3
-  path_provider: ^2.1.6
-  pdf: ^3.13.0
-  permission_handler: ^13.0.1
-  shared_preferences: ^2.5.5
-  url_launcher: ^6.3.2
+  intl: ^0.19.0
+  path_provider: ^2.1.4
+  pdf: ^3.10.7
+  permission_handler: ^11.3.1
+  shared_preferences: ^2.3.2
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
-  gh_pages: ^0.1.1
+  flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true
