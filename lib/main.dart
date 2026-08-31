@@ -257,7 +257,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Comentario / Detalle'),
+        title: const Text('Comentario / Detalle'),
         content: TextField(
           controller: comCtrl,
           decoration: const InputDecoration(labelText: 'Ej. Color rojo, Talla L, Fragancia vainilla...'),
@@ -278,6 +278,80 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
     );
   }
 
+  // Diálogo para gestionar cantidad o eliminar producto
+  void _mostrarDialogoGestionProducto(int index) {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          var item = productosSeleccionados[index];
+          return AlertDialog(
+            title: Text(item['nombre'], style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Cantidad actual: ${item['cantidad']}', style: const TextStyle(fontSize: 16)),
+                const SizedBox(height: 15),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                      onPressed: () {
+                        setState(() {
+                          if (item['cantidad'] > 1) {
+                            item['cantidad']--;
+                          } else {
+                            productosSeleccionados.removeAt(index);
+                            Navigator.pop(context);
+                          }
+                        });
+                        setStateDialog(() {});
+                        if(productosSeleccionados.length <= index) Navigator.pop(context);
+                      },
+                      icon: const Icon(Icons.remove, size: 16),
+                      label: const Text('Menos'),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                      onPressed: () {
+                        setState(() {
+                          item['cantidad']++;
+                        });
+                        setStateDialog(() {});
+                      },
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Más'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                TextButton.icon(
+                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  onPressed: () {
+                    setState(() {
+                      productosSeleccionados.removeAt(index);
+                    });
+                    Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.delete),
+                  label: const Text('Eliminar del pedido'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     bool escribiendoCliente = _searchClienteCtrl.text.trim().isNotEmpty;
@@ -287,70 +361,78 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
       padding: const EdgeInsets.all(12.0),
       child: ListView(
         children: [
-          // 1. Buscador de Clientes (Se oculta si se está buscando producto)
-          if (!escribiendoProd) ...[
-            const Text('1. Buscar y Seleccionar Cliente', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            TextField(
-              controller: _searchClienteCtrl,
-              decoration: const InputDecoration(labelText: 'Filtrar cliente...', suffixIcon: Icon(Icons.search)),
-              onChanged: (val) => setState(() {}),
-            ),
-            if (escribiendoCliente)
-              SizedBox(
-                height: 130,
-                child: FutureBuilder<List<Map<String, dynamic>>>(
-                  future: DatabaseHelper.instance.database.then((db) {
-                    String filtro = _searchClienteCtrl.text.trim();
-                    return db.query('clientes', where: 'nombre LIKE ? OR codigo LIKE ?', whereArgs: ['%$filtro%', '%$filtro%']);
-                  }),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                    final clientes = snapshot.data!;
-                    if (clientes.isEmpty) {
-                      return const Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: Text('No se encontraron clientes', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                      );
-                    }
-                    return ListView.builder(
-                      itemCount: clientes.length,
-                      itemBuilder: (context, index) {
-                        final c = clientes[index];
-                        return ListTile(
-                          dense: true,
-                          title: Text('Cod: ${c['codigo']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.indigo)),
-                          subtitle: Text('${c['nombre']} | Tel: ${c['telefono']}', style: const TextStyle(fontSize: 12)),
-                          selected: clienteSeleccionado == c['nombre'],
-                          onTap: () {
-                            setState(() {
-                              clienteSeleccionado = c['nombre'];
-                              _searchClienteCtrl.clear();
-                            });
-                            FocusScope.of(context).unfocus();
-                          },
+          // 1. Buscador de Clientes o Cliente Seleccionado
+          if (clienteSeleccionado == null) ...[
+            if (!escribiendoProd) ...[
+              const Text('1. Buscar y Seleccionar Cliente', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              TextField(
+                controller: _searchClienteCtrl,
+                decoration: const InputDecoration(labelText: 'Filtrar cliente...', suffixIcon: Icon(Icons.search)),
+                onChanged: (val) => setState(() {}),
+              ),
+              if (escribiendoCliente)
+                SizedBox(
+                  height: 400,
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: DatabaseHelper.instance.database.then((db) {
+                      String filtro = _searchClienteCtrl.text.trim();
+                      return db.query('clientes', where: 'nombre LIKE ? OR codigo LIKE ?', whereArgs: ['%$filtro%', '%$filtro%']);
+                    }),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                      final clientes = snapshot.data!;
+                      if (clientes.isEmpty) {
+                        return const Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: Text('No se encontraron clientes', style: TextStyle(color: Colors.grey, fontSize: 12)),
                         );
-                      },
-                    );
-                  },
+                      }
+                      return ListView.builder(
+                        itemCount: clientes.length,
+                        itemBuilder: (context, index) {
+                          final c = clientes[index];
+                          return ListTile(
+                            dense: true,
+                            title: Text('Cod: ${c['codigo']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.indigo)),
+                            subtitle: Text('${c['nombre']} | Tel: ${c['telefono']}', style: const TextStyle(fontSize: 12)),
+                            onTap: () {
+                              setState(() {
+                                clienteSeleccionado = c['nombre'];
+                                _searchClienteCtrl.clear();
+                              });
+                              FocusScope.of(context).unfocus();
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
-          ],
-
-          if (clienteSeleccionado != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4.0),
-              child: Chip(
-                label: Text('Cliente: $clienteSeleccionado', style: const TextStyle(fontSize: 12)),
-                backgroundColor: Colors.green[100],
-                deleteIcon: const Icon(Icons.close, size: 16),
-                onDeleted: () => setState(() => clienteSeleccionado = null),
-              ),
+            ],
+          ] else ...[
+            // Muestra únicamente el nombre del cliente seleccionado de forma limpia
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Chip(
+                    label: Text('Cliente: $clienteSeleccionado', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    backgroundColor: Colors.green[100],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit, size: 18, color: Colors.indigo),
+                  tooltip: 'Cambiar cliente',
+                  onPressed: () => setState(() => clienteSeleccionado = null),
+                ),
+              ],
             ),
+          ],
 
           const SizedBox(height: 10),
 
-          // 2. Buscador de Productos (Se oculta si se está buscando cliente)
-          if (!escribiendoCliente) ...[
+          // 2. Buscador de Productos
+          if (!escribiendoCliente && clienteSeleccionado != null) ...[
             const Text('2. Buscar y Agregar Productos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             TextField(
               controller: _searchProdCtrl,
@@ -359,7 +441,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
             ),
             if (escribiendoProd)
               SizedBox(
-                height: 150,
+                height: 400,
                 child: FutureBuilder<List<Map<String, dynamic>>>(
                   future: DatabaseHelper.instance.database.then((db) {
                     String filtro = _searchProdCtrl.text.trim();
@@ -382,27 +464,26 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                           dense: true,
                           title: Text('Cod: ${p['codigo']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.indigo)),
                           subtitle: Text('${p['nombre']} - L ${p['precio'].toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.add_circle, color: Colors.indigo, size: 22),
-                            onPressed: () {
-                              setState(() {
-                                var existente = productosSeleccionados.firstWhere(
-                                  (item) => item['nombre'] == p['nombre'],
-                                  orElse: () => {},
-                                );
-                                if (existente.isNotEmpty) {
-                                  existente['cantidad']++;
-                                } else {
-                                  productosSeleccionados.add({
-                                    'nombre': p['nombre'],
-                                    'precio': p['precio'],
-                                    'cantidad': 1,
-                                    'comentario': '',
-                                  });
-                                }
-                              });
-                            },
-                          ),
+                          onTap: () {
+                            setState(() {
+                              var existente = productosSeleccionados.firstWhere(
+                                (item) => item['nombre'] == p['nombre'],
+                                orelse: () => {},
+                              );
+                              if (existente.isNotEmpty) {
+                                existente['cantidad']++;
+                              } else {
+                                productosSeleccionados.add({
+                                  'nombre': p['nombre'],
+                                  'precio': p['precio'],
+                                  'cantidad': 1,
+                                  'comentario': '',
+                                });
+                              }
+                              _searchProdCtrl.clear();
+                            });
+                            FocusScope.of(context).unfocus();
+                          },
                         );
                       },
                     );
@@ -411,45 +492,66 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
               ),
           ],
 
-          const Divider(height: 20),
-          
-          // Lista de productos agregados al pedido actual
-          ...productosSeleccionados.asMap().entries.map((entry) {
-            int idx = entry.key;
-            var item = entry.value;
-            String comText = (item['comentario'] != null && item['comentario'].toString().isNotEmpty)
-                ? ' | Detalle: ${item['comentario']}'
-                : '';
-            return ListTile(
-              dense: true,
-              title: Text(item['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              subtitle: Text('Cant: ${item['cantidad']} x L ${item['precio']}$comText', style: const TextStyle(fontSize: 11)),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.comment, color: Colors.blue, size: 18),
-                    tooltip: 'Agregar Comentario',
-                    onPressed: () => _pedirComentario(idx),
+          // Productos Agregados al Pedido Actual
+          if (!escribiendoCliente && !escribiendoProd) ...[
+            const Divider(height: 20),
+            ...productosSeleccionados.asMap().entries.map((entry) {
+              int idx = entry.key;
+              var item = entry.value;
+              String comText = (item['comentario'] != null && item['comentario'].toString().isNotEmpty)
+                  ? ' | Detalle: ${item['comentario']}'
+                  : '';
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: Row(
+                    children: [
+                      // Parte izquierda: Tocar para agregar comentario
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => _pedirComentario(idx),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(item['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                Text('Cant: ${item['cantidad']} x L ${item['precio']}$comText', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Parte derecha: Tocar para abrir el diálogo de cantidad / eliminar
+                      InkWell(
+                        onTap: () => _mostrarDialogoGestionProducto(idx),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Text(
+                            'L ${(item['precio'] * item['cantidad']).toStringAsFixed(2)}', 
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.indigo),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  Text('L ${(item['precio'] * item['cantidad']).toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            );
-          }),
+                ),
+              );
+            }),
 
-          const SizedBox(height: 15),
-          
-          // Botón Guardar bloqueado si no hay cliente
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: clienteSeleccionado == null ? Colors.grey : Colors.indigo,
-              foregroundColor: Colors.white,
+            const SizedBox(height: 15),
+            
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: clienteSeleccionado == null ? Colors.grey : Colors.indigo,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: clienteSeleccionado == null ? null : _guardarPedido,
+              icon: const Icon(Icons.save),
+              label: Text(clienteSeleccionado == null ? 'Seleccione un Cliente para Guardar' : 'Guardar Pedido'),
             ),
-            onPressed: clienteSeleccionado == null ? null : _guardarPedido,
-            icon: const Icon(Icons.save),
-            label: Text(clienteSeleccionado == null ? 'Seleccione un Cliente para Guardar' : 'Guardar Pedido'),
-          ),
+          ],
         ],
       ),
     );
@@ -610,7 +712,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
 }
 
 // ==========================================
-// 3. GESTIÓN CLIENTES (Orden: Código arriba)
+// 3. GESTIÓN CLIENTES
 // ==========================================
 class VistaGestionClientes extends StatefulWidget {
   const VistaGestionClientes({super.key});
@@ -667,7 +769,7 @@ class _VistaGestionClientesState extends State<VistaGestionClientes> {
 }
 
 // ==========================================
-// 4. GESTIÓN PRODUCTOS (Orden: Código arriba)
+// 4. GESTIÓN PRODUCTOS
 // ==========================================
 class VistaGestionProductos extends StatefulWidget {
   const VistaGestionProductos({super.key});
