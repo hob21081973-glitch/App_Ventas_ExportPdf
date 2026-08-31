@@ -8,8 +8,8 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 // URLs de Google Sheets (Reemplaza con tus enlaces CSV publicados)
-const String urlClientesCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=0&single=true&output=csv';
-const String urlProductosCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=1903712481&single=true&output=csv';
+const String urlClientesCSV = 'https://docs.google.com/spreadsheets/d/TU_ID_CLIENTES/export?format=csv';
+const String urlProductosCSV = 'https://docs.google.com/spreadsheets/d/TU_ID_PRODUCTOS/export?format=csv';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -181,7 +181,7 @@ class _MenuPrincipalState extends State<MenuPrincipal> {
 }
 
 // ==========================================
-// 1. PESTAÑA: CREAR PEDIDO (Num 01 al 99)
+// 1. PESTAÑA: CREAR PEDIDO
 // ==========================================
 class VistaCrearPedido extends StatefulWidget {
   const VistaCrearPedido({super.key});
@@ -201,14 +201,19 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
     final db = await DatabaseHelper.instance.database;
     final resultado = await db.rawQuery('SELECT COUNT(*) as total FROM pedidos');
     int count = Sqflite.firstIntValue(resultado) ?? 0;
-    // Ciclo estricto de 01 al 99
     return (count % 99) + 1;
   }
 
   void _guardarPedido() async {
-    if (clienteSeleccionado == null || productosSeleccionados.isEmpty) {
+    if (clienteSeleccionado == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleccione un cliente y al menos un producto')),
+        const SnackBar(content: Text('Debe seleccionar un cliente obligatoriamente')),
+      );
+      return;
+    }
+    if (productosSeleccionados.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Agregue al menos un producto al pedido')),
       );
       return;
     }
@@ -218,7 +223,12 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
     double total = productosSeleccionados.fold(0, (sum, item) => sum + (item['precio'] * item['cantidad']));
     String fecha = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
 
-    String productosStr = productosSeleccionados.map((p) => "${p['nombre']} (x${p['cantidad']})").join('; ');
+    String productosStr = productosSeleccionados.map((p) {
+      String com = (p['comentario'] != null && p['comentario'].toString().trim().isNotEmpty)
+          ? ' [${p['comentario']}]'
+          : '';
+      return "${p['nombre']}$com (x${p['cantidad']})";
+    }).join('; ');
 
     final db = await DatabaseHelper.instance.database;
     await db.insert('pedidos', {
@@ -242,139 +252,203 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
     );
   }
 
+  void _pedirComentario(int index) {
+    TextEditingController comCtrl = TextEditingController(text: productosSeleccionados[index]['comentario'] ?? '');
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Comentario / Detalle'),
+        content: TextField(
+          controller: comCtrl,
+          decoration: const InputDecoration(labelText: 'Ej. Color rojo, Talla L, Fragancia vainilla...'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                productosSeleccionados[index]['comentario'] = comCtrl.text.trim();
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    bool escribiendoCliente = _searchClienteCtrl.text.trim().isNotEmpty;
+    bool escribiendoProd = _searchProdCtrl.text.trim().isNotEmpty;
+
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(12.0),
       child: ListView(
         children: [
-          const Text('1. Buscar y Seleccionar Cliente', style: TextStyle(fontWeight: FontWeight.bold)),
-          TextField(
-            controller: _searchClienteCtrl,
-            decoration: const InputDecoration(labelText: 'Filtrar cliente...', suffixIcon: Icon(Icons.search)),
-            onChanged: (val) => setState(() {}),
-          ),
-          if (_searchClienteCtrl.text.trim().isNotEmpty)
-            SizedBox(
-              height: 120,
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: DatabaseHelper.instance.database.then((db) {
-                  String filtro = _searchClienteCtrl.text.trim();
-                  return db.query('clientes', where: 'nombre LIKE ?', whereArgs: ['%$filtro%']);
-                }),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                  final clientes = snapshot.data!;
-                  if (clientes.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Text('No se encontraron clientes', style: TextStyle(color: Colors.grey)),
-                    );
-                  }
-                  return ListView.builder(
-                    itemCount: clientes.length,
-                    itemBuilder: (context, index) {
-                      final c = clientes[index];
-                      return ListTile(
-                        title: Text(c['nombre']),
-                        subtitle: Text('Tel: ${c['telefono']}'),
-                        selected: clienteSeleccionado == c['nombre'],
-                        onTap: () {
-                          setState(() {
-                            clienteSeleccionado = c['nombre'];
-                            _searchClienteCtrl.clear();
-                          });
-                          FocusScope.of(context).unfocus();
-                        },
-                      );
-                    },
-                  );
-                },
-              ),
+          // 1. Buscador de Clientes (Se oculta si se está buscando producto)
+          if (!escribiendoProd) ...[
+            const Text('1. Buscar y Seleccionar Cliente', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            TextField(
+              controller: _searchClienteCtrl,
+              decoration: const InputDecoration(labelText: 'Filtrar cliente...', suffixIcon: Icon(Icons.search)),
+              onChanged: (val) => setState(() {}),
             ),
-          
+            if (escribiendoCliente)
+              SizedBox(
+                height: 130,
+                child: FutureBuilder<List<Map<String, dynamic>>>(
+                  future: DatabaseHelper.instance.database.then((db) {
+                    String filtro = _searchClienteCtrl.text.trim();
+                    return db.query('clientes', where: 'nombre LIKE ? OR codigo LIKE ?', whereArgs: ['%$filtro%', '%$filtro%']);
+                  }),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                    final clientes = snapshot.data!;
+                    if (clientes.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: Text('No se encontraron clientes', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      );
+                    }
+                    return ListView.builder(
+                      itemCount: clientes.length,
+                      itemBuilder: (context, index) {
+                        final c = clientes[index];
+                        return ListTile(
+                          dense: true,
+                          title: Text('Cod: ${c['codigo']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.indigo)),
+                          subtitle: Text('${c['nombre']} | Tel: ${c['telefono']}', style: const TextStyle(fontSize: 12)),
+                          selected: clienteSeleccionado == c['nombre'],
+                          onTap: () {
+                            setState(() {
+                              clienteSeleccionado = c['nombre'];
+                              _searchClienteCtrl.clear();
+                            });
+                            FocusScope.of(context).unfocus();
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+          ],
+
           if (clienteSeleccionado != null)
             Padding(
-              padding: const EdgeInsets.only(top: 8.0),
+              padding: const EdgeInsets.symmetric(vertical: 4.0),
               child: Chip(
-                label: Text('Cliente: $clienteSeleccionado'),
+                label: Text('Cliente: $clienteSeleccionado', style: const TextStyle(fontSize: 12)),
                 backgroundColor: Colors.green[100],
-                deleteIcon: const Icon(Icons.close),
+                deleteIcon: const Icon(Icons.close, size: 16),
                 onDeleted: () => setState(() => clienteSeleccionado = null),
               ),
             ),
 
-          const Divider(height: 30),
-          const Text('2. Buscar y Agregar Productos', style: TextStyle(fontWeight: FontWeight.bold)),
-          TextField(
-            controller: _searchProdCtrl,
-            decoration: const InputDecoration(labelText: 'Filtrar producto...', suffixIcon: Icon(Icons.search)),
-            onChanged: (val) => setState(() {}),
-          ),
-          if (_searchProdCtrl.text.trim().isNotEmpty)
-            SizedBox(
-              height: 150,
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: DatabaseHelper.instance.database.then((db) {
-                  String filtro = _searchProdCtrl.text.trim();
-                  return db.query('productos', where: 'nombre LIKE ?', whereArgs: ['%$filtro%']);
-                }),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                  final productos = snapshot.data!;
-                  if (productos.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Text('No se encontraron productos', style: TextStyle(color: Colors.grey)),
-                    );
-                  }
-                  return ListView.builder(
-                    itemCount: productos.length,
-                    itemBuilder: (context, index) {
-                      final p = productos[index];
-                      return ListTile(
-                        title: Text(p['nombre']),
-                        subtitle: Text('L ${p['precio'].toStringAsFixed(2)}'),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.add_circle, color: Colors.indigo),
-                          onPressed: () {
-                            setState(() {
-                              var existente = productosSeleccionados.firstWhere(
-                                (item) => item['nombre'] == p['nombre'],
-                                orElse: () => {},
-                              );
-                              if (existente.isNotEmpty) {
-                                existente['cantidad']++;
-                              } else {
-                                productosSeleccionados.add({
-                                  'nombre': p['nombre'],
-                                  'precio': p['precio'],
-                                  'cantidad': 1,
-                                });
-                              }
-                            });
-                          },
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
+          const SizedBox(height: 10),
 
-          const Divider(),
-          const Text('Productos en el Pedido Actual:', style: TextStyle(fontWeight: FontWeight.bold)),
-          ...productosSeleccionados.map((item) => ListTile(
-                title: Text(item['nombre']),
-                subtitle: Text('Cant: ${item['cantidad']} x L ${item['precio']}'),
-                trailing: Text('L ${(item['precio'] * item['cantidad']).toStringAsFixed(2)}'),
-              )),
-          const SizedBox(height: 20),
+          // 2. Buscador de Productos (Se oculta si se está buscando cliente)
+          if (!escribiendoCliente) ...[
+            const Text('2. Buscar y Agregar Productos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            TextField(
+              controller: _searchProdCtrl,
+              decoration: const InputDecoration(labelText: 'Filtrar producto...', suffixIcon: Icon(Icons.search)),
+              onChanged: (val) => setState(() {}),
+            ),
+            if (escribiendoProd)
+              SizedBox(
+                height: 150,
+                child: FutureBuilder<List<Map<String, dynamic>>>(
+                  future: DatabaseHelper.instance.database.then((db) {
+                    String filtro = _searchProdCtrl.text.trim();
+                    return db.query('productos', where: 'nombre LIKE ? OR codigo LIKE ?', whereArgs: ['%$filtro%', '%$filtro%']);
+                  }),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                    final productos = snapshot.data!;
+                    if (productos.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: Text('No se encontraron productos', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      );
+                    }
+                    return ListView.builder(
+                      itemCount: productos.length,
+                      itemBuilder: (context, index) {
+                        final p = productos[index];
+                        return ListTile(
+                          dense: true,
+                          title: Text('Cod: ${p['codigo']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.indigo)),
+                          subtitle: Text('${p['nombre']} - L ${p['precio'].toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.add_circle, color: Colors.indigo, size: 22),
+                            onPressed: () {
+                              setState(() {
+                                var existente = productosSeleccionados.firstWhere(
+                                  (item) => item['nombre'] == p['nombre'],
+                                  orElse: () => {},
+                                );
+                                if (existente.isNotEmpty) {
+                                  existente['cantidad']++;
+                                } else {
+                                  productosSeleccionados.add({
+                                    'nombre': p['nombre'],
+                                    'precio': p['precio'],
+                                    'cantidad': 1,
+                                    'comentario': '',
+                                  });
+                                }
+                              });
+                            },
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+          ],
+
+          const Divider(height: 20),
+          
+          // Lista de productos agregados al pedido actual
+          ...productosSeleccionados.asMap().entries.map((entry) {
+            int idx = entry.key;
+            var item = entry.value;
+            String comText = (item['comentario'] != null && item['comentario'].toString().isNotEmpty)
+                ? ' | Detalle: ${item['comentario']}'
+                : '';
+            return ListTile(
+              dense: true,
+              title: Text(item['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              subtitle: Text('Cant: ${item['cantidad']} x L ${item['precio']}$comText', style: const TextStyle(fontSize: 11)),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.comment, color: Colors.blue, size: 18),
+                    tooltip: 'Agregar Comentario',
+                    onPressed: () => _pedirComentario(idx),
+                  ),
+                  Text('L ${(item['precio'] * item['cantidad']).toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            );
+          }),
+
+          const SizedBox(height: 15),
+          
+          // Botón Guardar bloqueado si no hay cliente
           ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-            onPressed: _guardarPedido,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: clienteSeleccionado == null ? Colors.grey : Colors.indigo,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: clienteSeleccionado == null ? null : _guardarPedido,
             icon: const Icon(Icons.save),
-            label: const Text('Guardar Pedido'),
+            label: Text(clienteSeleccionado == null ? 'Seleccione un Cliente para Guardar' : 'Guardar Pedido'),
           ),
         ],
       ),
@@ -383,7 +457,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
 }
 
 // ==========================================
-// 2. PESTAÑA: HISTORIAL (Edición conservando número)
+// 2. PESTAÑA: HISTORIAL DE PEDIDOS
 // ==========================================
 class VistaHistorialPedidos extends StatefulWidget {
   const VistaHistorialPedidos({super.key});
@@ -439,7 +513,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     );
   }
 
-  // Diálogo avanzado para modificar cliente, productos y cantidades conservando el N° de pedido
   void _dialogoEditarPedidoCompleto(Map<String, dynamic> pedido) {
     TextEditingController clienteCtrl = TextEditingController(text: pedido['cliente']);
     TextEditingController productosCtrl = TextEditingController(text: pedido['productos_json']);
@@ -456,25 +529,11 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
             children: [
               Text('Número fijo: ${pedido['numero_pedido']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
               const SizedBox(height: 10),
-              TextField(
-                controller: clienteCtrl, 
-                decoration: const InputDecoration(labelText: 'Cliente'),
-              ),
+              TextField(controller: clienteCtrl, decoration: const InputDecoration(labelText: 'Cliente')),
               const SizedBox(height: 10),
-              TextField(
-                controller: productosCtrl, 
-                decoration: const InputDecoration(
-                  labelText: 'Productos (ej. Producto A (x2); Producto B (x1))',
-                  helperText: 'Modifica nombres o cambia el número en (xN)',
-                ),
-                maxLines: 3,
-              ),
+              TextField(controller: productosCtrl, decoration: const InputDecoration(labelText: 'Productos y Comentarios'), maxLines: 3),
               const SizedBox(height: 10),
-              TextField(
-                controller: totalCtrl, 
-                decoration: const InputDecoration(labelText: 'Total en Lempiras'), 
-                keyboardType: TextInputType.number,
-              ),
+              TextField(controller: totalCtrl, decoration: const InputDecoration(labelText: 'Total en Lempiras'), keyboardType: TextInputType.number),
             ],
           ),
         ),
@@ -531,12 +590,13 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 child: ListTile(
-                  title: Text('${p['numero_pedido']} - ${p['cliente']}'),
-                  subtitle: Text('${p['productos_json']}\nFecha: ${p['fecha']} | Total: L ${p['total'].toStringAsFixed(2)}'),
+                  dense: true,
+                  title: Text('${p['numero_pedido']} - ${p['cliente']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  subtitle: Text('${p['productos_json']}\nFecha: ${p['fecha']} | Total: L ${p['total'].toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
                   isThreeLine: true,
                   onTap: () => _mostrarMenuOpciones(p),
                   trailing: IconButton(
-                    icon: const Icon(Icons.share, color: Colors.green),
+                    icon: const Icon(Icons.share, color: Colors.green, size: 22),
                     onPressed: () => _enviarWhatsApp(p['cliente'], p['productos_json'], p['total']),
                   ),
                 ),
@@ -550,7 +610,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
 }
 
 // ==========================================
-// 3. GESTIÓN CLIENTES (Fuente Reducida)
+// 3. GESTIÓN CLIENTES (Orden: Código arriba)
 // ==========================================
 class VistaGestionClientes extends StatefulWidget {
   const VistaGestionClientes({super.key});
@@ -595,9 +655,9 @@ class _VistaGestionClientesState extends State<VistaGestionClientes> {
           return ListView.builder(
             itemCount: lista.length,
             itemBuilder: (context, i) => ListTile(
-              dense: true, // Hace el elemento más compacto
-              title: Text(lista[i]['nombre'], style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-              subtitle: Text('Cod: ${lista[i]['codigo']} | Tel: ${lista[i]['telefono']}', style: const TextStyle(fontSize: 11)),
+              dense: true,
+              title: Text('Cod: ${lista[i]['codigo']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.indigo)),
+              subtitle: Text('${lista[i]['nombre']} | Tel: ${lista[i]['telefono']}', style: const TextStyle(fontSize: 12)),
             ),
           );
         },
@@ -607,7 +667,7 @@ class _VistaGestionClientesState extends State<VistaGestionClientes> {
 }
 
 // ==========================================
-// 4. GESTIÓN PRODUCTOS (Fuente Reducida)
+// 4. GESTIÓN PRODUCTOS (Orden: Código arriba)
 // ==========================================
 class VistaGestionProductos extends StatefulWidget {
   const VistaGestionProductos({super.key});
@@ -652,9 +712,9 @@ class _VistaGestionProductosState extends State<VistaGestionProductos> {
           return ListView.builder(
             itemCount: lista.length,
             itemBuilder: (context, i) => ListTile(
-              dense: true, // Compacto para mejor alineación horizontal
-              title: Text(lista[i]['nombre'], style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-              subtitle: Text('Cod: ${lista[i]['codigo']} | Precio: L ${lista[i]['precio'].toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
+              dense: true,
+              title: Text('Cod: ${lista[i]['codigo']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.indigo)),
+              subtitle: Text('${lista[i]['nombre']} - Precio: L ${lista[i]['precio'].toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
             ),
           );
         },
