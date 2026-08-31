@@ -181,7 +181,7 @@ class _MenuPrincipalState extends State<MenuPrincipal> {
 }
 
 // ==========================================
-// 1. PESTAÑA: CREAR PEDIDO (MODIFICADA)
+// 1. PESTAÑA: CREAR PEDIDO (Num 01 al 99)
 // ==========================================
 class VistaCrearPedido extends StatefulWidget {
   const VistaCrearPedido({super.key});
@@ -201,6 +201,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
     final db = await DatabaseHelper.instance.database;
     final resultado = await db.rawQuery('SELECT COUNT(*) as total FROM pedidos');
     int count = Sqflite.firstIntValue(resultado) ?? 0;
+    // Ciclo estricto de 01 al 99
     return (count % 99) + 1;
   }
 
@@ -253,7 +254,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
             decoration: const InputDecoration(labelText: 'Filtrar cliente...', suffixIcon: Icon(Icons.search)),
             onChanged: (val) => setState(() {}),
           ),
-          // Si no hay texto escrito, la lista de clientes permanece totalmente oculta
           if (_searchClienteCtrl.text.trim().isNotEmpty)
             SizedBox(
               height: 120,
@@ -282,10 +282,8 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                         onTap: () {
                           setState(() {
                             clienteSeleccionado = c['nombre'];
-                            // Al seleccionar, limpiamos el buscador para que se oculte la lista de resultados
                             _searchClienteCtrl.clear();
                           });
-                          // Oculta el teclado virtual tras seleccionar
                           FocusScope.of(context).unfocus();
                         },
                       );
@@ -313,7 +311,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
             decoration: const InputDecoration(labelText: 'Filtrar producto...', suffixIcon: Icon(Icons.search)),
             onChanged: (val) => setState(() {}),
           ),
-          // Si no hay texto escrito, la lista de productos permanece totalmente oculta
           if (_searchProdCtrl.text.trim().isNotEmpty)
             SizedBox(
               height: 150,
@@ -355,8 +352,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                                   'cantidad': 1,
                                 });
                               }
-                              // Opcional: si quieres limpiar el buscador de productos al agregar, descomenta la siguiente línea:
-                              // _searchProdCtrl.clear();
                             });
                           },
                         ),
@@ -388,7 +383,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
 }
 
 // ==========================================
-// 2. PESTAÑA: HISTORIAL DE PEDIDOS
+// 2. PESTAÑA: HISTORIAL (Edición conservando número)
 // ==========================================
 class VistaHistorialPedidos extends StatefulWidget {
   const VistaHistorialPedidos({super.key});
@@ -422,10 +417,10 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
           children: [
             ListTile(
               leading: const Icon(Icons.edit, color: Colors.blue),
-              title: const Text('Editar Pedido'),
+              title: const Text('Editar Pedido y Cantidades'),
               onTap: () {
                 Navigator.pop(context);
-                _dialogoEditarPedido(pedido);
+                _dialogoEditarPedidoCompleto(pedido);
               },
             ),
             ListTile(
@@ -444,37 +439,64 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     );
   }
 
-  void _dialogoEditarPedido(Map<String, dynamic> pedido) {
+  // Diálogo avanzado para modificar cliente, productos y cantidades conservando el N° de pedido
+  void _dialogoEditarPedidoCompleto(Map<String, dynamic> pedido) {
     TextEditingController clienteCtrl = TextEditingController(text: pedido['cliente']);
-    TextEditingController prodCtrl = TextEditingController(text: pedido['productos_json']);
+    TextEditingController productosCtrl = TextEditingController(text: pedido['productos_json']);
     TextEditingController totalCtrl = TextEditingController(text: pedido['total'].toString());
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Editar ${pedido['numero_pedido']}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: clienteCtrl, decoration: const InputDecoration(labelText: 'Cliente')),
-            TextField(controller: prodCtrl, decoration: const InputDecoration(labelText: 'Productos')),
-            TextField(controller: totalCtrl, decoration: const InputDecoration(labelText: 'Total'), keyboardType: TextInputType.number),
-          ],
+        title: Text('Editando ${pedido['numero_pedido']}'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Número fijo: ${pedido['numero_pedido']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+              const SizedBox(height: 10),
+              TextField(
+                controller: clienteCtrl, 
+                decoration: const InputDecoration(labelText: 'Cliente'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: productosCtrl, 
+                decoration: const InputDecoration(
+                  labelText: 'Productos (ej. Producto A (x2); Producto B (x1))',
+                  helperText: 'Modifica nombres o cambia el número en (xN)',
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: totalCtrl, 
+                decoration: const InputDecoration(labelText: 'Total en Lempiras'), 
+                keyboardType: TextInputType.number,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
             onPressed: () async {
               final db = await DatabaseHelper.instance.database;
               await db.update('pedidos', {
                 'cliente': clienteCtrl.text,
-                'productos_json': prodCtrl.text,
-                'total': double.tryParse(totalCtrl.text) ?? 0.0,
+                'productos_json': productosCtrl.text,
+                'total': double.tryParse(totalCtrl.text) ?? pedido['total'],
               }, where: 'id = ?', whereArgs: [pedido['id']]);
+              
               Navigator.pop(context);
               setState(() {});
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('¡${pedido['numero_pedido']} actualizado con éxito!')),
+              );
             },
-            child: const Text('Guardar'),
+            child: const Text('Guardar Cambios'),
           ),
         ],
       ),
@@ -528,7 +550,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
 }
 
 // ==========================================
-// 3 & 4. GESTIÓN CLIENTES Y PRODUCTOS
+// 3. GESTIÓN CLIENTES (Fuente Reducida)
 // ==========================================
 class VistaGestionClientes extends StatefulWidget {
   const VistaGestionClientes({super.key});
@@ -573,8 +595,9 @@ class _VistaGestionClientesState extends State<VistaGestionClientes> {
           return ListView.builder(
             itemCount: lista.length,
             itemBuilder: (context, i) => ListTile(
-              title: Text(lista[i]['nombre']),
-              subtitle: Text('Cod: ${lista[i]['codigo']} | Tel: ${lista[i]['telefono']}'),
+              dense: true, // Hace el elemento más compacto
+              title: Text(lista[i]['nombre'], style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+              subtitle: Text('Cod: ${lista[i]['codigo']} | Tel: ${lista[i]['telefono']}', style: const TextStyle(fontSize: 11)),
             ),
           );
         },
@@ -583,6 +606,9 @@ class _VistaGestionClientesState extends State<VistaGestionClientes> {
   }
 }
 
+// ==========================================
+// 4. GESTIÓN PRODUCTOS (Fuente Reducida)
+// ==========================================
 class VistaGestionProductos extends StatefulWidget {
   const VistaGestionProductos({super.key});
 
@@ -626,8 +652,9 @@ class _VistaGestionProductosState extends State<VistaGestionProductos> {
           return ListView.builder(
             itemCount: lista.length,
             itemBuilder: (context, i) => ListTile(
-              title: Text(lista[i]['nombre']),
-              subtitle: Text('Cod: ${lista[i]['codigo']} | Precio: L ${lista[i]['precio'].toStringAsFixed(2)}'),
+              dense: true, // Compacto para mejor alineación horizontal
+              title: Text(lista[i]['nombre'], style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+              subtitle: Text('Cod: ${lista[i]['codigo']} | Precio: L ${lista[i]['precio'].toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
             ),
           );
         },
