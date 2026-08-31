@@ -540,7 +540,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
   Widget build(BuildContext context) {
     final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
     bool estaEditando = mainState?.editandoPedidoId != null;
-    double totalActual = mainState?.productosEnCurso.fold(0, (sum, item) => sum + (item['precio'] * item['cantidad'])) ?? 0.0;
+    double totalActual = mainState?.productosEnCurso.fold<double>(0.0, (sum, item) => sum + ((item['precio'] as num).toDouble() * (item['cantidad'] as num).toDouble())) ?? 0.0;
 
     return Scaffold(
       appBar: AppBar(
