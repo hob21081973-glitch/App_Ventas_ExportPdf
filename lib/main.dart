@@ -411,7 +411,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                 ),
             ],
           ] else ...[
-            // Muestra únicamente el nombre del cliente seleccionado de forma limpia
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -467,9 +466,10 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                           subtitle: Text('${p['nombre']} - L ${p['precio'].toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
                           onTap: () {
                             setState(() {
+                              // CORRECCIÓN: Se remueve el parámetro 'orelse:' para evitar el error de compilación
                               var existente = productosSeleccionados.firstWhere(
                                 (item) => item['nombre'] == p['nombre'],
-                                orelse: () => {},
+                                () => {},
                               );
                               if (existente.isNotEmpty) {
                                 existente['cantidad']++;
