@@ -47,7 +47,7 @@ class DatabaseHelper {
 
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
-    final path = '${dbPath}/$filePath'; // Manejo directo de ruta sin importar conflictive path package
+    final path = '$dbPath/$filePath';
 
     return await openDatabase(
       path,
@@ -181,7 +181,7 @@ class _MenuPrincipalState extends State<MenuPrincipal> {
 }
 
 // ==========================================
-// 1. PESTAÑA: CREAR PEDIDO
+// 1. PESTAÑA: CREAR PEDIDO (MODIFICADA)
 // ==========================================
 class VistaCrearPedido extends StatefulWidget {
   const VistaCrearPedido({super.key});
@@ -253,33 +253,59 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
             decoration: const InputDecoration(labelText: 'Filtrar cliente...', suffixIcon: Icon(Icons.search)),
             onChanged: (val) => setState(() {}),
           ),
-          SizedBox(
-            height: 120,
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: DatabaseHelper.instance.database.then((db) {
-                String filtro = _searchClienteCtrl.text;
-                return db.query('clientes', where: 'nombre LIKE ?', whereArgs: ['%$filtro%']);
-              }),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                final clientes = snapshot.data!;
-                return ListView.builder(
-                  itemCount: clientes.length,
-                  itemBuilder: (context, index) {
-                    final c = clientes[index];
-                    return ListTile(
-                      title: Text(c['nombre']),
-                      subtitle: Text('Tel: ${c['telefono']}'),
-                      selected: clienteSeleccionado == c['nombre'],
-                      onTap: () => setState(() => clienteSeleccionado = c['nombre']),
+          // Si no hay texto escrito, la lista de clientes permanece totalmente oculta
+          if (_searchClienteCtrl.text.trim().isNotEmpty)
+            SizedBox(
+              height: 120,
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: DatabaseHelper.instance.database.then((db) {
+                  String filtro = _searchClienteCtrl.text.trim();
+                  return db.query('clientes', where: 'nombre LIKE ?', whereArgs: ['%$filtro%']);
+                }),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                  final clientes = snapshot.data!;
+                  if (clientes.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Text('No se encontraron clientes', style: TextStyle(color: Colors.grey)),
                     );
-                  },
-                );
-              },
+                  }
+                  return ListView.builder(
+                    itemCount: clientes.length,
+                    itemBuilder: (context, index) {
+                      final c = clientes[index];
+                      return ListTile(
+                        title: Text(c['nombre']),
+                        subtitle: Text('Tel: ${c['telefono']}'),
+                        selected: clienteSeleccionado == c['nombre'],
+                        onTap: () {
+                          setState(() {
+                            clienteSeleccionado = c['nombre'];
+                            // Al seleccionar, limpiamos el buscador para que se oculte la lista de resultados
+                            _searchClienteCtrl.clear();
+                          });
+                          // Oculta el teclado virtual tras seleccionar
+                          FocusScope.of(context).unfocus();
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
+          
           if (clienteSeleccionado != null)
-            Chip(label: Text('Cliente: $clienteSeleccionado'), backgroundColor: Colors.green[100]),
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Chip(
+                label: Text('Cliente: $clienteSeleccionado'),
+                backgroundColor: Colors.green[100],
+                deleteIcon: const Icon(Icons.close),
+                onDeleted: () => setState(() => clienteSeleccionado = null),
+              ),
+            ),
+
           const Divider(height: 30),
           const Text('2. Buscar y Agregar Productos', style: TextStyle(fontWeight: FontWeight.bold)),
           TextField(
@@ -287,49 +313,60 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
             decoration: const InputDecoration(labelText: 'Filtrar producto...', suffixIcon: Icon(Icons.search)),
             onChanged: (val) => setState(() {}),
           ),
-          SizedBox(
-            height: 150,
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: DatabaseHelper.instance.database.then((db) {
-                String filtro = _searchProdCtrl.text;
-                return db.query('productos', where: 'nombre LIKE ?', whereArgs: ['%$filtro%']);
-              }),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                final productos = snapshot.data!;
-                return ListView.builder(
-                  itemCount: productos.length,
-                  itemBuilder: (context, index) {
-                    final p = productos[index];
-                    return ListTile(
-                      title: Text(p['nombre']),
-                      subtitle: Text('L ${p['precio'].toStringAsFixed(2)}'),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.add_circle, color: Colors.indigo),
-                        onPressed: () {
-                          setState(() {
-                            var existente = productosSeleccionados.firstWhere(
-                              (item) => item['nombre'] == p['nombre'],
-                              orElse: () => {},
-                            );
-                            if (existente.isNotEmpty) {
-                              existente['cantidad']++;
-                            } else {
-                              productosSeleccionados.add({
-                                'nombre': p['nombre'],
-                                'precio': p['precio'],
-                                'cantidad': 1,
-                              });
-                            }
-                          });
-                        },
-                      ),
+          // Si no hay texto escrito, la lista de productos permanece totalmente oculta
+          if (_searchProdCtrl.text.trim().isNotEmpty)
+            SizedBox(
+              height: 150,
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: DatabaseHelper.instance.database.then((db) {
+                  String filtro = _searchProdCtrl.text.trim();
+                  return db.query('productos', where: 'nombre LIKE ?', whereArgs: ['%$filtro%']);
+                }),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                  final productos = snapshot.data!;
+                  if (productos.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Text('No se encontraron productos', style: TextStyle(color: Colors.grey)),
                     );
-                  },
-                );
-              },
+                  }
+                  return ListView.builder(
+                    itemCount: productos.length,
+                    itemBuilder: (context, index) {
+                      final p = productos[index];
+                      return ListTile(
+                        title: Text(p['nombre']),
+                        subtitle: Text('L ${p['precio'].toStringAsFixed(2)}'),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.add_circle, color: Colors.indigo),
+                          onPressed: () {
+                            setState(() {
+                              var existente = productosSeleccionados.firstWhere(
+                                (item) => item['nombre'] == p['nombre'],
+                                orElse: () => {},
+                              );
+                              if (existente.isNotEmpty) {
+                                existente['cantidad']++;
+                              } else {
+                                productosSeleccionados.add({
+                                  'nombre': p['nombre'],
+                                  'precio': p['precio'],
+                                  'cantidad': 1,
+                                });
+                              }
+                              // Opcional: si quieres limpiar el buscador de productos al agregar, descomenta la siguiente línea:
+                              // _searchProdCtrl.clear();
+                            });
+                          },
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
+
           const Divider(),
           const Text('Productos en el Pedido Actual:', style: TextStyle(fontWeight: FontWeight.bold)),
           ...productosSeleccionados.map((item) => ListTile(
