@@ -466,13 +466,14 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                           subtitle: Text('${p['nombre']} - L ${p['precio'].toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
                           onTap: () {
                             setState(() {
-                              // CORRECCIÓN: Se remueve el parámetro 'orelse:' para evitar el error de compilación
-                              var existente = productosSeleccionados.firstWhere(
+                              
+                              // Buscamos si ya existe el producto en la lista
+                              var existenteIndex = productosSeleccionados.indexWhere(
                                 (item) => item['nombre'] == p['nombre'],
-                                () => {},
                               );
-                              if (existente.isNotEmpty) {
-                                existente['cantidad']++;
+                              
+                              if (existenteIndex != -1) {
+                                productosSeleccionados[existenteIndex]['cantidad']++;
                               } else {
                                 productosSeleccionados.add({
                                   'nombre': p['nombre'],
@@ -482,7 +483,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                                 });
                               }
                               _searchProdCtrl.clear();
-                            });
                             FocusScope.of(context).unfocus();
                           },
                         );
