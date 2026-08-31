@@ -279,7 +279,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
     );
   }
 
-  // Diálogo para gestionar cantidad o eliminar producto
   void _mostrarDialogoGestionProducto(int index) {
     showDialog(
       context: context,
@@ -362,7 +361,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
       padding: const EdgeInsets.all(12.0),
       child: ListView(
         children: [
-          // 1. Buscador de Clientes o Cliente Seleccionado
           if (clienteSeleccionado == null) ...[
             if (!escribiendoProd) ...[
               const Text('1. Buscar y Seleccionar Cliente', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
@@ -431,7 +429,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
 
           const SizedBox(height: 10),
 
-          // 2. Buscador de Productos
           if (!escribiendoCliente && clienteSeleccionado != null) ...[
             const Text('2. Buscar y Agregar Productos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             TextField(
@@ -466,12 +463,10 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                           subtitle: Text('${p['nombre']} - L ${p['precio'].toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
                           onTap: () {
                             setState(() {
-                              
-                              // Buscamos si ya existe el producto en la lista
                               var existenteIndex = productosSeleccionados.indexWhere(
                                 (item) => item['nombre'] == p['nombre'],
                               );
-                              
+
                               if (existenteIndex != -1) {
                                 productosSeleccionados[existenteIndex]['cantidad']++;
                               } else {
@@ -483,6 +478,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                                 });
                               }
                               _searchProdCtrl.clear();
+                            });
                             FocusScope.of(context).unfocus();
                           },
                         );
@@ -493,7 +489,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
               ),
           ],
 
-          // Productos Agregados al Pedido Actual
           if (!escribiendoCliente && !escribiendoProd) ...[
             const Divider(height: 20),
             ...productosSeleccionados.asMap().entries.map((entry) {
@@ -508,7 +503,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                   padding: const EdgeInsets.symmetric(vertical: 4.0),
                   child: Row(
                     children: [
-                      // Parte izquierda: Tocar para agregar comentario
                       Expanded(
                         child: InkWell(
                           onTap: () => _pedirComentario(idx),
@@ -524,7 +518,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                           ),
                         ),
                       ),
-                      // Parte derecha: Tocar para abrir el diálogo de cantidad / eliminar
                       InkWell(
                         onTap: () => _mostrarDialogoGestionProducto(idx),
                         child: Padding(
