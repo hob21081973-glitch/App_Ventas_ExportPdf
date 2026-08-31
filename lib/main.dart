@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -32,7 +31,7 @@ class AppVentasExportPdf extends StatelessWidget {
 }
 
 // ==========================================
-// BASE DE DATOS LOCALS (SQLITE)
+// BASE DE DATOS LOCAL (SQLITE)
 // ==========================================
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -48,7 +47,7 @@ class DatabaseHelper {
 
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, filePath);
+    final path = '${dbPath}/$filePath'; // Manejo directo de ruta sin importar conflictive path package
 
     return await openDatabase(
       path,
@@ -86,7 +85,6 @@ class DatabaseHelper {
     ''');
   }
 
-  // Sincronizar Clientes desde CSV de Google Sheets
   Future<void> sincronizarClientesDesdeCSV(String csvData) async {
     final db = await instance.database;
     List<String> lineas = csvData.split('\n');
@@ -107,7 +105,6 @@ class DatabaseHelper {
     });
   }
 
-  // Sincronizar Productos desde CSV de Google Sheets
   Future<void> sincronizarProductosDesdeCSV(String csvData) async {
     final db = await instance.database;
     List<String> lineas = csvData.split('\n');
@@ -197,7 +194,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
   String? clienteSeleccionado;
   List<Map<String, dynamic>> productosSeleccionados = [];
   
-  // Controladores de búsqueda
   final TextEditingController _searchClienteCtrl = TextEditingController();
   final TextEditingController _searchProdCtrl = TextEditingController();
 
@@ -205,7 +201,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
     final db = await DatabaseHelper.instance.database;
     final resultado = await db.rawQuery('SELECT COUNT(*) as total FROM pedidos');
     int count = Sqflite.firstIntValue(resultado) ?? 0;
-    return (count % 99) + 1; // Formato del 01 al 99
+    return (count % 99) + 1;
   }
 
   void _guardarPedido() async {
@@ -221,7 +217,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
     double total = productosSeleccionados.fold(0, (sum, item) => sum + (item['precio'] * item['cantidad']));
     String fecha = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
 
-    // Guardar en Base de Datos (serializamos productos en string simple o formato JSON manual)
     String productosStr = productosSeleccionados.map((p) => "${p['nombre']} (x${p['cantidad']})").join('; ');
 
     final db = await DatabaseHelper.instance.database;
@@ -356,7 +351,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
 }
 
 // ==========================================
-// 2. PESTAÑA: HISTORIAL DE PEDIDOS Y ACCIONES
+// 2. PESTAÑA: HISTORIAL DE PEDIDOS
 // ==========================================
 class VistaHistorialPedidos extends StatefulWidget {
   const VistaHistorialPedidos({super.key});
@@ -390,7 +385,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
           children: [
             ListTile(
               leading: const Icon(Icons.edit, color: Colors.blue),
-              title: const Text('Editar Pedido (Cliente/Productos)'),
+              title: const Text('Editar Pedido'),
               onTap: () {
                 Navigator.pop(context);
                 _dialogoEditarPedido(pedido);
@@ -496,7 +491,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
 }
 
 // ==========================================
-// 3 & 4. PESTAÑAS: CLIENTES Y PRODUCTOS (Cloud Sync)
+// 3 & 4. GESTIÓN CLIENTES Y PRODUCTOS
 // ==========================================
 class VistaGestionClientes extends StatefulWidget {
   const VistaGestionClientes({super.key});
@@ -515,7 +510,7 @@ class _VistaGestionClientesState extends State<VistaGestionClientes> {
       if (res.statusCode == 200) {
         await DatabaseHelper.instance.sincronizarClientesDesdeCSV(res.body);
         if(!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Clientes sincronizados desde Sheets')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Clientes sincronizados')));
       }
     } catch (e) {
       if(!mounted) return;
@@ -568,7 +563,7 @@ class _VistaGestionProductosState extends State<VistaGestionProductos> {
       if (res.statusCode == 200) {
         await DatabaseHelper.instance.sincronizarProductosDesdeCSV(res.body);
         if(!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Productos sincronizados desde Sheets')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Productos sincronizados')));
       }
     } catch (e) {
       if(!mounted) return;
@@ -605,7 +600,7 @@ class _VistaGestionProductosState extends State<VistaGestionProductos> {
 }
 
 // ==========================================
-// 5. PESTAÑA: RESUMEN GENERAL (Ventas, Fecha, Cliente)
+// 5. RESUMEN GENERAL
 // ==========================================
 class VistaResumenGeneral extends StatelessWidget {
   const VistaResumenGeneral({super.key});
@@ -617,10 +612,8 @@ class VistaResumenGeneral extends StatelessWidget {
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final pedidos = snapshot.data!;
-        
         double totalGlobal = pedidos.fold(0, (sum, item) => sum + item['total']);
         
-        // Agrupar por fecha (solo día)
         Map<String, double> porFecha = {};
         Map<String, double> porCliente = {};
         
@@ -628,7 +621,6 @@ class VistaResumenGeneral extends StatelessWidget {
           String fecha = p['fecha'].toString().substring(0, 10);
           String cliente = p['cliente'];
           double total = p['total'];
-
           porFecha[fecha] = (porFecha[fecha] ?? 0) + total;
           porCliente[cliente] = (porCliente[cliente] ?? 0) + total;
         }
@@ -658,7 +650,7 @@ class VistaResumenGeneral extends StatelessWidget {
 }
 
 // ==========================================
-// 6. PESTAÑA: RESUMEN POR PRODUCTO
+// 6. RESUMEN POR PRODUCTO
 // ==========================================
 class VistaResumenProductos extends StatelessWidget {
   const VistaResumenProductos({super.key});
@@ -670,21 +662,17 @@ class VistaResumenProductos extends StatelessWidget {
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final pedidos = snapshot.data!;
-        
         Map<String, int> conteoUnidades = {};
-        Map<String, double> sumaTotalProd = {};
 
         for (var p in pedidos) {
-          String prodString = p['productos_json']; // Ejemplo: "Cafe (x2); Azucar (x1)"
+          String prodString = p['productos_json'];
           List<String> items = prodString.split(';');
           for (var item in items) {
             if(item.trim().isEmpty) continue;
-            // Parseo básico de producto y cantidad
             try {
               var partes = item.split('(x');
               String nombreProd = partes[0].trim();
               int cant = int.parse(partes[1].replaceAll(')', '').trim());
-              
               conteoUnidades[nombreProd] = (conteoUnidades[nombreProd] ?? 0) + cant;
             } catch (_) {}
           }
@@ -707,7 +695,7 @@ class VistaResumenProductos extends StatelessWidget {
 }
 
 // ==========================================
-// 7. PESTAÑA: SELECTOR Y EXPORTACIÓN A PDF (Carta)
+// 7. EXPORTAR A PDF (Tamaño Carta)
 // ==========================================
 class VistaExportarPdf extends StatefulWidget {
   const VistaExportarPdf({super.key});
@@ -717,30 +705,20 @@ class VistaExportarPdf extends StatefulWidget {
 }
 
 class _VistaExportarPdfState extends State<VistaExportarPdf> {
-  DateTime? fechaInicio;
-  DateTime? fechaFin;
   String? pedidoFiltro;
 
   Future<void> _generarYMostrarPdf(BuildContext context) async {
     final pdf = pw.Document();
-    
     final db = await DatabaseHelper.instance.database;
     List<Map<String, dynamic>> pedidos = await db.query('pedidos');
 
-    // Filtrar localmente si se requiere
     if (pedidoFiltro != null && pedidoFiltro!.isNotEmpty) {
       pedidos = pedidos.where((p) => p['numero_pedido'] == pedidoFiltro).toList();
-    } else if (fechaInicio != null && fechaFin != null) {
-      pedidos = pedidos.where((p) {
-        DateTime f = DateTime.parse(p['fecha']);
-        return f.isAfter(fechaInicio!.subtract(const Duration(days: 1))) && 
-               f.isBefore(fechaFin!.add(const Duration(days: 1)));
-      }).toList();
     }
 
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.letter, // Tamaño Carta (21.59 cm x 27.94 cm)
+        pageFormat: PdfPageFormat.letter,
         build: (pw.Context context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
