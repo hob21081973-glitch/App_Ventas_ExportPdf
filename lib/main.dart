@@ -3,6 +3,8 @@ import 'package:sqflite/sqflite.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 // URLs de Google Sheets (Reemplaza con tus enlaces CSV publicados)
 const String urlClientesCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=0&single=true&output=csv';
@@ -143,6 +145,46 @@ class MenuPrincipalState extends State<MenuPrincipal> {
   String? clienteEnCurso;
   List<Map<String, dynamic>> productosEnCurso = [];
 
+  @override
+  void initState() {
+    super.initState();
+    _cargarBorradorLocal();
+  }
+
+  // Guardar automáticamente en borrador cada cambio
+  Future<void> _guardarBorradorLocal() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('editandoPedidoId', editandoPedidoId ?? -1);
+    await prefs.setString('editandoNumeroPedidoFijo', editandoNumeroPedidoFijo ?? '');
+    await prefs.setString('clienteEnCurso', clienteEnCurso ?? '');
+    await prefs.setString('productosEnCurso', jsonEncode(productosEnCurso));
+  }
+
+  // Recuperar borrador al iniciar la app
+  Future<void> _cargarBorradorLocal() async {
+    final prefs = await SharedPreferences.getInstance();
+    int? idTemp = prefs.getInt('editandoPedidoId');
+    if (idTemp != null && idTemp != -1) {
+      editandoPedidoId = idTemp;
+    }
+    String? numTemp = prefs.getString('editandoNumeroPedidoFijo');
+    if (numTemp != null && numTemp.isNotEmpty) {
+      editandoNumeroPedidoFijo = numTemp;
+    }
+    String? cliTemp = prefs.getString('clienteEnCurso');
+    if (cliTemp != null && cliTemp.isNotEmpty) {
+      clienteEnCurso = cliTemp;
+    }
+    String? prodTemp = prefs.getString('productosEnCurso');
+    if (prodTemp != null && prodTemp.isNotEmpty) {
+      try {
+        List<dynamic> dec = jsonDecode(prodTemp);
+        productosEnCurso = dec.map((e) => Map<String, dynamic>.from(e)).toList();
+      } catch (_) {}
+    }
+    setState(() {});
+  }
+
   void cargarPedidoParaEditar(int id, String numeroPedido, String cliente, List<Map<String, dynamic>> productos) {
     setState(() {
       editandoPedidoId = id;
@@ -151,15 +193,18 @@ class MenuPrincipalState extends State<MenuPrincipal> {
       productosEnCurso = List.from(productos);
       _indiceActual = 0;
     });
+    _guardarBorradorLocal();
   }
 
-  void limpiarPedidoEnCurso() {
+  void limpiarPedidoEnCurso() async {
     setState(() {
       editandoPedidoId = null;
       editandoNumeroPedidoFijo = null;
       clienteEnCurso = null;
       productosEnCurso.clear();
     });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
   }
 
   @override
@@ -167,6 +212,7 @@ class MenuPrincipalState extends State<MenuPrincipal> {
     final List<Widget> pantallas = [
       VistaCrearPedido(
         onPedidoGuardado: limpiarPedidoEnCurso,
+        onCambioDato: _guardarBorradorLocal,
       ),
       const VistaHistorialPedidos(),
       const VistaGestionClientes(),
@@ -206,7 +252,8 @@ class MenuPrincipalState extends State<MenuPrincipal> {
 // ==========================================
 class VistaCrearPedido extends StatefulWidget {
   final VoidCallback onPedidoGuardado;
-  const VistaCrearPedido({super.key, required this.onPedidoGuardado});
+  final VoidCallback onCambioDato;
+  const VistaCrearPedido({super.key, required this.onPedidoGuardado, required this.onCambioDato});
 
   @override
   State<VistaCrearPedido> createState() => _VistaCrearPedidoState();
@@ -347,6 +394,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                                         mainState.setState(() {
                                           mainState.clienteEnCurso = c['nombre'];
                                         });
+                                        widget.onCambioDato();
                                       }
                                       Navigator.pop(context);
                                       setState(() {});
@@ -445,6 +493,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                                             });
                                           }
                                         });
+                                        widget.onCambioDato();
                                       }
                                       Navigator.pop(context);
                                       setState(() {});
@@ -487,6 +536,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
               setState(() {
                 mainState.productosEnCurso[index]['comentario'] = comCtrl.text.trim();
               });
+              widget.onCambioDato();
               Navigator.pop(context);
             },
             child: const Text('Guardar'),
@@ -504,6 +554,9 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setStateDialog) {
+          if (index >= mainState.productosEnCurso.length) {
+            return const SizedBox.shrink();
+          }
           var item = mainState.productosEnCurso[index];
           return AlertDialog(
             title: Text(item['nombre'], style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
@@ -523,12 +576,14 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                             item['cantidad']--;
                           } else {
                             mainState.productosEnCurso.removeAt(index);
-                            Navigator.pop(context);
                           }
                         });
+                        widget.onCambioDato();
                         setStateDialog(() {});
                         setState(() {});
-                        if(mainState.productosEnCurso.length <= index) Navigator.pop(context);
+                        if (index >= mainState.productosEnCurso.length || mainState.productosEnCurso.isEmpty) {
+                          Navigator.pop(context);
+                        }
                       },
                       icon: const Icon(Icons.remove, size: 16),
                       label: const Text('Menos'),
@@ -540,6 +595,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                         mainState.setState(() {
                           item['cantidad']++;
                         });
+                        widget.onCambioDato();
                         setStateDialog(() {});
                         setState(() {});
                       },
@@ -555,6 +611,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                     mainState.setState(() {
                       mainState.productosEnCurso.removeAt(index);
                     });
+                    widget.onCambioDato();
                     Navigator.pop(context);
                     setState(() {});
                   },
