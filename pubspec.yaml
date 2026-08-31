@@ -1,0 +1,13 @@
+name: app_ventas
+description: Un nuevo proyecto de Flutter.
+
+environment:
+  sdk: '^3.13.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sqflite: ^2.3.0
+  path: ^1.8.3
+  url_launcher: ^6.1.12
+  http: ^1.1.0 # <-- Agregar esta línea
