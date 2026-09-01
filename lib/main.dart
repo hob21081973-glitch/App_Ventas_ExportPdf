@@ -6,7 +6,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
-//  URLs de Google Sheets (Reemplaza con tus enlaces CSV publicados)
+// Notificador global para actualizar datos en tiempo real entre pestañas
+final ValueNotifier<int> changeNotifierPedidos = ValueNotifier<int>(0);
+
+// URLs de Google Sheets (Reemplaza con tus enlaces CSV publicados)
 const String urlClientesCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=0&single=true&output=csv';
 const String urlProductosCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=1903712481&single=true&output=csv';
 
@@ -321,6 +324,10 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
     }
 
     widget.onPedidoGuardado();
+    
+    // Avisamos a las demás pestañas que hay cambios nuevos para que se actualicen al instante
+    changeNotifierPedidos.value++;
+
     setState(() {});
 
     if(!mounted) return;
@@ -639,7 +646,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
       (sum, item) => sum + ((item['precio'] as num).toDouble() * (item['cantidad'] as num).toDouble())
     ) ?? 0.0;
 
-    // Verificamos si hay cliente y productos para cambiar el color del icono de disquete (antiguo)
     bool pedidoValido = (mainState?.clienteEnCurso != null && (mainState?.productosEnCurso.isNotEmpty ?? false));
 
     return Scaffold(
@@ -802,7 +808,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                     ),
                   ),
                   onPressed: mainState?.clienteEnCurso == null ? null : _guardarPedido,
-                  // Icono de disquete antiguo (Icons.save / Floppy Disk) que se ve opaco si falta info
                   icon: Icon(
                     Icons.save, 
                     size: 18, 
@@ -832,7 +837,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                     'L ${totalActual.toStringAsFixed(2)}',
                     style: TextStyle(
                       fontSize: 17,
-                      fontWeight: FontWeight.w900, // Súper negrita
+                      fontWeight: FontWeight.w900,
                       color: Colors.indigo.shade900,
                     ),
                   ),
@@ -857,9 +862,27 @@ class VistaHistorialPedidos extends StatefulWidget {
 }
 
 class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
+  @override
+  void initState() {
+    super.initState();
+    // Escuchamos los cambios para redibujar de inmediato cuando se guarde un pedido
+    changeNotifierPedidos.addListener(_actualizarHistorial);
+  }
+
+  @override
+  void dispose() {
+    changeNotifierPedidos.removeListener(_actualizarHistorial);
+    super.dispose();
+  }
+
+  void _actualizarHistorial() {
+    if (mounted) setState(() {});
+  }
+
   Future<void> _resetearConteo() async {
     final db = await DatabaseHelper.instance.database;
     await db.delete('pedidos');
+    changeNotifierPedidos.value++;
     setState(() {});
     if(!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conteo de pedidos reseteado a 0')));
@@ -894,6 +917,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                 Navigator.pop(context);
                 final db = await DatabaseHelper.instance.database;
                 await db.delete('pedidos', where: 'id = ?', whereArgs: [pedido['id']]);
+                changeNotifierPedidos.value++;
                 setState(() {});
               },
             ),
@@ -971,6 +995,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         ],
       ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
+        key: ValueKey(changeNotifierPedidos.value), // Fuerza la recarga inmediata al cambiar el valor global
         future: DatabaseHelper.instance.database.then((db) => db.query('pedidos', orderBy: 'id DESC')),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
@@ -1122,14 +1147,36 @@ class _VistaGestionProductosState extends State<VistaGestionProductos> {
 // ==========================================
 // 5. RESUMEN GENERAL
 // ==========================================
-class VistaResumenGeneral extends StatelessWidget {
+class VistaResumenGeneral extends StatefulWidget {
   const VistaResumenGeneral({super.key});
+
+  @override
+  State<VistaResumenGeneral> createState() => _VistaResumenGeneralState();
+}
+
+class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
+  @override
+  void initState() {
+    super.initState();
+    changeNotifierPedidos.addListener(_actualizarResumen);
+  }
+
+  @override
+  void dispose() {
+    changeNotifierPedidos.removeListener(_actualizarResumen);
+    super.dispose();
+  }
+
+  void _actualizarResumen() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Resumen General'), backgroundColor: Colors.indigo, foregroundColor: Colors.white),
       body: FutureBuilder<List<Map<String, dynamic>>>(
+        key: ValueKey(changeNotifierPedidos.value),
         future: DatabaseHelper.instance.database.then((db) => db.query('pedidos')),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
@@ -1186,10 +1233,27 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
   String tipoVista = 'unidades';
 
   @override
+  void initState() {
+    super.initState();
+    changeNotifierPedidos.addListener(_actualizarResumenProd);
+  }
+
+  @override
+  void dispose() {
+    changeNotifierPedidos.removeListener(_actualizarResumenProd);
+    super.dispose();
+  }
+
+  void _actualizarResumenProd() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Resumen por Producto'), backgroundColor: Colors.indigo, foregroundColor: Colors.white),
       body: FutureBuilder<List<Map<String, dynamic>>>(
+        key: ValueKey(changeNotifierPedidos.value),
         future: DatabaseHelper.instance.database.then((db) => db.query('pedidos')),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
