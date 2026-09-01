@@ -151,7 +151,6 @@ class MenuPrincipalState extends State<MenuPrincipal> {
     _cargarBorradorLocal();
   }
 
-  // Guardar automáticamente en borrador cada cambio
   Future<void> _guardarBorradorLocal() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('editandoPedidoId', editandoPedidoId ?? -1);
@@ -160,7 +159,6 @@ class MenuPrincipalState extends State<MenuPrincipal> {
     await prefs.setString('productosEnCurso', jsonEncode(productosEnCurso));
   }
 
-  // Recuperar borrador al iniciar la app
   Future<void> _cargarBorradorLocal() async {
     final prefs = await SharedPreferences.getInstance();
     int? idTemp = prefs.getInt('editandoPedidoId');
@@ -248,7 +246,7 @@ class MenuPrincipalState extends State<MenuPrincipal> {
 }
 
 // ==========================================
-// 1. PESTAÑA: CREAR PEDIDO
+// 1. PESTAÑA: CREAR PEDIDO (Con Botón Fijo y Gran Total)
 // ==========================================
 class VistaCrearPedido extends StatefulWidget {
   final VoidCallback onPedidoGuardado;
@@ -647,11 +645,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.save),
-            tooltip: 'Guardar Pedido',
-            onPressed: mainState?.clienteEnCurso == null ? null : _guardarPedido,
-          ),
           if (estaEditando)
             IconButton(
               icon: const Icon(Icons.close, color: Colors.amberAccent),
@@ -773,24 +766,69 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                       },
                     ),
             ),
+          ],
+        ),
+      ),
 
-            // TOTAL DINÁMICO EN TIEMPO REAL
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.indigo.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.indigo.shade200),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Total del Pedido:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                  Text('L ${totalActual.toStringAsFixed(2)}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.indigo)),
-                ],
-              ),
+      // BARRA INFERIOR FIJA: GRAN TOTAL A LA DERECHA Y BOTÓN "Guardar Pedido"
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.all(12.0),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 6,
+              offset: const Offset(0, -3),
             ),
           ],
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  const Text(
+                    'Gran Total: ',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  Text(
+                    'L ${totalActual.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.indigo.shade900,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.indigo,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: mainState?.clienteEnCurso == null ? null : _guardarPedido,
+                  child: const Text(
+                    'Guardar Pedido',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
