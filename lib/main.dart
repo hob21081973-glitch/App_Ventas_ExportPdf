@@ -246,7 +246,7 @@ class MenuPrincipalState extends State<MenuPrincipal> {
 }
 
 // ==========================================
-// 1. PESTAÑA: CREAR PEDIDO (Con Botón Fijo y Gran Total)
+// 1. PESTAÑA: CREAR PEDIDO
 // ==========================================
 class VistaCrearPedido extends StatefulWidget {
   final VoidCallback onPedidoGuardado;
@@ -639,6 +639,9 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
       (sum, item) => sum + ((item['precio'] as num).toDouble() * (item['cantidad'] as num).toDouble())
     ) ?? 0.0;
 
+    // Verificamos si hay cliente y productos para cambiar el color del icono de disquete (antiguo)
+    bool pedidoValido = (mainState?.clienteEnCurso != null && (mainState?.productosEnCurso.isNotEmpty ?? false));
+
     return Scaffold(
       appBar: AppBar(
         title: Text(estaEditando ? 'Editando ${mainState?.editandoNumeroPedidoFijo}' : 'Crear Pedido'),
@@ -770,9 +773,9 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
         ),
       ),
 
-      // BARRA INFERIOR FIJA: GRAN TOTAL A LA DERECHA Y BOTÓN "Guardar Pedido"
+      // BARRA INFERIOR FIJA: BOTÓN GUARDAR (IZQUIERDA) Y GRAN TOTAL (DERECHA)
       bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
         decoration: BoxDecoration(
           color: Colors.white,
           boxShadow: [
@@ -784,48 +787,56 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
           ],
         ),
         child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  const Text(
-                    'Gran Total: ',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  Text(
-                    'L ${totalActual.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.indigo.shade900,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
+              // Botón Guardar Pedido con el icono de disquete antiguo a la izquierda
+              Expanded(
+                child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
-                    foregroundColor: Colors.white,
+                    backgroundColor: pedidoValido ? Colors.indigo : Colors.grey.shade300,
+                    foregroundColor: pedidoValido ? Colors.white : Colors.grey.shade600,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
                   onPressed: mainState?.clienteEnCurso == null ? null : _guardarPedido,
-                  child: const Text(
+                  // Icono de disquete antiguo (Icons.save / Floppy Disk) que se ve opaco si falta info
+                  icon: Icon(
+                    Icons.save, 
+                    size: 18, 
+                    color: pedidoValido ? Colors.white : Colors.grey.shade500,
+                  ),
+                  label: const Text(
                     'Guardar Pedido',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                   ),
                 ),
+              ),
+              const SizedBox(width: 12),
+              // Gran Total a la derecha en negrita y llamativo
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text(
+                    'Gran Total:',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'L ${totalActual.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900, // Súper negrita
+                      color: Colors.indigo.shade900,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
