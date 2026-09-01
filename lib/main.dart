@@ -779,7 +779,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
         ),
       ),
 
-      // BARRA INFERIOR FIJA: BOTÓN GUARDAR (IZQUIERDA) Y GRAN TOTAL (DERECHA)
+      // BARRA INFERIOR FIJA: BOTÓN GUARDAR Y GRAN TOTAL AL 50% DE ANCHO CADA UNO
       bottomNavigationBar: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
         decoration: BoxDecoration(
@@ -794,15 +794,15 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
         ),
         child: SafeArea(
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Botón Guardar Pedido con el icono de disquete antiguo a la izquierda
+              // Botón Guardar Pedido (Ocupa el 50% izquierdo)
               Expanded(
+                flex: 1,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: pedidoValido ? Colors.indigo : Colors.grey.shade300,
                     foregroundColor: pedidoValido ? Colors.white : Colors.grey.shade600,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -814,43 +814,53 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                     color: pedidoValido ? Colors.white : Colors.grey.shade500,
                   ),
                   label: const Text(
-                    'Guardar Pedido',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    'Guardar',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-              // Gran Total a la derecha en negrita y llamativo
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Text(
-                    'Gran Total:',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.bold,
-                    ),
+              const SizedBox(width: 10),
+              // Gran Total a la derecha (Ocupa el 50% derecho con más espacio para su etiqueta)
+              Expanded(
+                flex: 1,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.indigo.shade100),
                   ),
-                  Text(
-                    'L ${totalActual.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.indigo.shade900,
-                    ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Gran Total:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'L ${totalActual.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.indigo.shade900,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ],
           ),
         ),
       ),
-    );
-  }
-}
-
+      
 // ==========================================
 // 2. PESTAÑA: HISTORIAL DE PEDIDOS
 // ==========================================
