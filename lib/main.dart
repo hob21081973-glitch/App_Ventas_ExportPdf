@@ -10,8 +10,8 @@ import 'dart:convert';
 final ValueNotifier<int> changeNotifierPedidos = ValueNotifier<int>(0);
 
 // URLs de Google Sheets (Reemplaza con tus enlaces CSV publicados)
-const String urlClientesCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=0&single=true&output=csv';
-const String urlProductosCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=1903712481&single=true&output=csv';
+const String urlClientesCSV = 'https://docs.google.com/spreadsheets/d/TU_ID_CLIENTES/export?format=csv';
+const String urlProductosCSV = 'https://docs.google.com/spreadsheets/d/TU_ID_PRODUCTOS/export?format=csv';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -192,7 +192,7 @@ class MenuPrincipalState extends State<MenuPrincipal> {
       editandoNumeroPedidoFijo = numeroPedido;
       clienteEnCurso = cliente;
       productosEnCurso = List.from(productos);
-      _indiceActual = 0;
+      _indiceActual = 0; // Cambiar automáticamente a la pestaña Crear Pedido
     });
     _guardarBorradorLocal();
   }
@@ -325,6 +325,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
 
     widget.onPedidoGuardado();
     
+    // Notificar globalmente a todas las pestañas de reportes e historial para refrescarse de inmediato
     changeNotifierPedidos.value++;
 
     setState(() {});
@@ -876,7 +877,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       parte = parte.trim();
       if (parte.isEmpty) continue;
       
-      // Ejemplo esperado: NOMBRE [comentario] (x2)
       int idxParentesis = parte.lastIndexOf('(x');
       String nombreYCom = idxParentesis != -1 ? parte.substring(0, idxParentesis).trim() : parte;
       
@@ -889,7 +889,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       lista.add({
         'nombre': nombreYCom,
         'cantidad': cantidad,
-        'precio': 0.0, // Precio referencial
+        'precio': 0.0,
       });
     }
     return lista;
@@ -905,7 +905,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
 
     final db = await DatabaseHelper.instance.database;
     for (var p in prodsParseados) {
-      // Limpiar nombre quitando comentarios para buscar precio real
       String nombreLimpio = p['nombre'];
       if (nombreLimpio.contains('[')) {
         nombreLimpio = nombreLimpio.substring(0, nombreLimpio.indexOf('[')).trim();
@@ -1208,8 +1207,29 @@ class _VistaGestionProductosState extends State<VistaGestionProductos> {
 // ==========================================
 // 5. PESTAÑA: RESUMEN GENERAL
 // ==========================================
-class VistaResumenGeneral extends StatelessWidget {
+class VistaResumenGeneral extends StatefulWidget {
   const VistaResumenGeneral({super.key});
+
+  @override
+  State<VistaResumenGeneral> createState() => _VistaResumenGeneralState();
+}
+
+class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
+  @override
+  void initState() {
+    super.initState();
+    changeNotifierPedidos.addListener(_refrescar);
+  }
+
+  @override
+  void dispose() {
+    changeNotifierPedidos.removeListener(_refrescar);
+    super.dispose();
+  }
+
+  void _refrescar() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1284,6 +1304,22 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
   int _criterioOrden = 0; // 0 = Unidades, 1 = Valor
 
   @override
+  void initState() {
+    super.initState();
+    changeNotifierPedidos.addListener(_refrescar);
+  }
+
+  @override
+  void dispose() {
+    changeNotifierPedidos.removeListener(_refrescar);
+    super.dispose();
+  }
+
+  void _refrescar() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -1333,7 +1369,6 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
                     int idxParentesis = parte.lastIndexOf('(x');
                     String nombreYCom = idxParentesis != -1 ? parte.substring(0, idxParentesis).trim() : parte;
                     
-                    // Limpiar nombre de comentarios eventuales para unificar métrica
                     String nombreLimpio = nombreYCom;
                     if (nombreLimpio.contains('[')) {
                       nombreLimpio = nombreLimpio.substring(0, nombreLimpio.indexOf('[')).trim();
@@ -1357,7 +1392,6 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
                   }
                 }
 
-                // Asignar precios reales desde la base de datos de productos para calcular el valor monetario exacto
                 return FutureBuilder<List<Map<String, dynamic>>>(
                   future: DatabaseHelper.instance.database.then((db) => db.query('productos')),
                   builder: (context, prodSnapshot) {
@@ -1381,7 +1415,6 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
                       });
                     });
 
-                    // Ordenamiento según selección del usuario
                     if (_criterioOrden == 0) {
                       listaResumen.sort((a, b) => b['unidades'].compareTo(a['unidades']));
                     } else {
@@ -1445,7 +1478,7 @@ class VistaExportarPdf extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Aquí puedes implementar la lógica de impresión o exportación de pedidos en formato PDF.',
+                'Aquí implementaremos próximamente las opciones de exportación por fecha y por número de pedido.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
               ),
@@ -1454,7 +1487,7 @@ class VistaExportarPdf extends StatelessWidget {
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Módulo listo para conectar motor de PDF')),
+                    const SnackBar(content: Text('Próximamente: Filtros por fecha y número de pedido')),
                   );
                 },
                 icon: const Icon(Icons.print),
