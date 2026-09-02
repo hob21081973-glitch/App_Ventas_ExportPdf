@@ -895,6 +895,36 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     return lista;
   }
 
+  void _mostrarOpcionesPedido(Map<String, dynamic> pedido) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${pedido['numero_pedido']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+        content: Text('¿Qué deseas hacer con el pedido de ${pedido['cliente']}?'),
+        actions: [
+          TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(context);
+              _eliminarPedido(pedido['id']);
+            },
+            icon: const Icon(Icons.delete),
+            label: const Text('Eliminar'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+            onPressed: () {
+              Navigator.pop(context);
+              _editarPedido(pedido);
+            },
+            icon: const Icon(Icons.edit),
+            label: const Text('Editar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _editarPedido(Map<String, dynamic> pedido) async {
     int id = pedido['id'];
     String numPedido = pedido['numero_pedido'];
@@ -927,6 +957,10 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     await db.delete('pedidos', where: 'id = ?', whereArgs: [id]);
     changeNotifierPedidos.value++;
     setState(() {});
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Pedido eliminado correctamente')),
+    );
   }
 
   @override
@@ -978,42 +1012,27 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                       final p = pedidosFiltrados[index];
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 6),
-                        child: Padding(
-                          padding: const EdgeInsets.all(10.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    '${p['numero_pedido']} - ${p['cliente']}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo),
-                                  ),
-                                  Row(
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
-                                        onPressed: () => _editarPedido(p),
-                                        tooltip: 'Editar pedido',
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                                        onPressed: () => _eliminarPedido(p['id']),
-                                        tooltip: 'Eliminar pedido',
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              const Divider(height: 8),
-                              Text('${p['productos_json']}', style: const TextStyle(fontSize: 13)),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Fecha: ${p['fecha']} | Total: L ${(p['total'] as num).toStringAsFixed(2)}',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54),
-                              ),
-                            ],
+                        child: InkWell(
+                          onTap: () => _mostrarOpcionesPedido(p),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${p['numero_pedido']} - ${p['cliente']}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo),
+                                ),
+                                const Divider(height: 8),
+                                Text('${p['productos_json']}', style: const TextStyle(fontSize: 13)),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Fecha: ${p['fecha']} | Total: L ${(p['total'] as num).toStringAsFixed(2)}',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -1028,7 +1047,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     );
   }
 }
-
 // ==========================================
 // 3. PESTAÑA: GESTIÓN DE CLIENTES
 // ==========================================
