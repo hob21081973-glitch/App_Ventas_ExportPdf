@@ -5,6 +5,9 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 // Notificador global para actualizar datos en tiempo real entre pestañas
 final ValueNotifier<int> changeNotifierPedidos = ValueNotifier<int>(0); 
@@ -131,7 +134,7 @@ class DatabaseHelper {
 }
 
 // ==========================================
-// MENÚ PRINCIPAL CON PESTAÑAS (Manteniendo Estado)
+// MENÚ PRINCIPAL CON PESTAÑAS
 // ==========================================
 class MenuPrincipal extends StatefulWidget {
   const MenuPrincipal({super.key});
@@ -192,7 +195,7 @@ class MenuPrincipalState extends State<MenuPrincipal> {
       editandoNumeroPedidoFijo = numeroPedido;
       clienteEnCurso = cliente;
       productosEnCurso = List.from(productos);
-      _indiceActual = 0; // Cambiar automáticamente a la pestaña Crear Pedido
+      _indiceActual = 0; // Cambiar a la pestaña "Crear"
     });
     _guardarBorradorLocal();
   }
@@ -324,10 +327,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
     }
 
     widget.onPedidoGuardado();
-    
-    // Notificar globalmente a todas las pestañas de reportes e historial para refrescarse de inmediato
     changeNotifierPedidos.value++;
-
     setState(() {});
 
     if(!mounted) return;
@@ -664,7 +664,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
         padding: const EdgeInsets.all(12.0),
         child: Column(
           children: [
-            // SECCIÓN CLIENTE CON LUPA
             Row(
               children: [
                 Expanded(
@@ -700,10 +699,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                 ),
               ],
             ),
-
             const SizedBox(height: 10),
-
-            // SECCIÓN PRODUCTOS CON LUPA
             Row(
               children: [
                 const Expanded(
@@ -717,10 +713,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                 ),
               ],
             ),
-
             const Divider(height: 15),
-
-            // LISTA DE PRODUCTOS SELECCIONADOS
             Expanded(
               child: (mainState?.productosEnCurso.isEmpty ?? true)
                   ? const Center(
@@ -773,68 +766,20 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                       },
                     ),
             ),
-          ],
-        ),
-      ),
-
-      // BARRA INFERIOR COMPACTA (50%) CON BOTÓN GUARDAR Y GRAN TOTAL A LA PAR
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 6,
-              offset: const Offset(0, -3),
+            const Divider(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Total: L ${totalActual.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.indigo)),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                  onPressed: _guardarPedido,
+                  icon: const Icon(Icons.save),
+                  label: Text(estaEditando ? 'Actualizar Pedido' : 'Guardar Pedido'),
+                ),
+              ],
             ),
           ],
-        ),
-        child: SafeArea(
-          child: Row(
-            children: [
-              Expanded(
-                flex: 5,
-                child: SizedBox(
-                  height: 38,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.zero,
-                    ),
-                    onPressed: _guardarPedido,
-                    icon: const Icon(Icons.save, size: 16),
-                    label: Text(
-                      estaEditando ? 'Actualizar' : 'Guardar Pedido',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 5,
-                child: Container(
-                  height: 38,
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.indigo.shade50,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.indigo.shade200),
-                  ),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      'Total: L ${totalActual.toStringAsFixed(2)}',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.indigo),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -842,7 +787,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
 }
 
 // ==========================================
-// 2. PESTAÑA: HISTORIAL DE PEDIDOS
+// 2. VISTA HISTORIAL DE PEDIDOS
 // ==========================================
 class VistaHistorialPedidos extends StatefulWidget {
   const VistaHistorialPedidos({super.key});
@@ -852,104 +797,9 @@ class VistaHistorialPedidos extends StatefulWidget {
 }
 
 class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
-  String _filtroTexto = '';
-
-  @override
-  void initState() {
-    super.initState();
-    changeNotifierPedidos.addListener(_recargarHistorial);
-  }
-
-  @override
-  void dispose() {
-    changeNotifierPedidos.removeListener(_recargarHistorial);
-    super.dispose();
-  }
-
-  void _recargarHistorial() {
-    if (mounted) setState(() {});
-  }
-
-  List<Map<String, dynamic>> _parsearProductosTexto(String productosJson) {
-    List<Map<String, dynamic>> lista = [];
-    var partes = productosJson.split(';');
-    for (var parte in partes) {
-      parte = parte.trim();
-      if (parte.isEmpty) continue;
-      
-      int idxParentesis = parte.lastIndexOf('(x');
-      String nombreYCom = idxParentesis != -1 ? parte.substring(0, idxParentesis).trim() : parte;
-      
-      int cantidad = 1;
-      if (idxParentesis != -1) {
-        String cantStr = parte.substring(idxParentesis + 2).replaceAll(')', '').trim();
-        cantidad = int.tryParse(cantStr) ?? 1;
-      }
-
-      lista.add({
-        'nombre': nombreYCom,
-        'cantidad': cantidad,
-        'precio': 0.0,
-      });
-    }
-    return lista;
-  }
-
-  void _mostrarOpcionesPedido(Map<String, dynamic> pedido) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${pedido['numero_pedido']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
-        content: Text('¿Qué deseas hacer con el pedido de ${pedido['cliente']}?'),
-        actions: [
-          TextButton.icon(
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: () async {
-              Navigator.pop(context);
-              _eliminarPedido(pedido['id']);
-            },
-            icon: const Icon(Icons.delete),
-            label: const Text('Eliminar'),
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-            onPressed: () {
-              Navigator.pop(context);
-              _editarPedido(pedido);
-            },
-            icon: const Icon(Icons.edit),
-            label: const Text('Editar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _editarPedido(Map<String, dynamic> pedido) async {
-    int id = pedido['id'];
-    String numPedido = pedido['numero_pedido'];
-    String cliente = pedido['cliente'];
-    String prodStr = pedido['productos_json'];
-
-    List<Map<String, dynamic>> prodsParseados = _parsearProductosTexto(prodStr);
-
+  Future<List<Map<String, dynamic>>> _cargarPedidos() async {
     final db = await DatabaseHelper.instance.database;
-    for (var p in prodsParseados) {
-      String nombreLimpio = p['nombre'];
-      if (nombreLimpio.contains('[')) {
-        nombreLimpio = nombreLimpio.substring(0, nombreLimpio.indexOf('[')).trim();
-      }
-      var res = await db.query('productos', where: 'nombre = ?', whereArgs: [nombreLimpio], limit: 1);
-      if (res.isNotEmpty) {
-        p['precio'] = res.first['precio'];
-        p['nombre'] = nombreLimpio;
-      }
-    }
-
-    final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
-    if (mainState != null) {
-      mainState.cargarPedidoParaEditar(id, numPedido, cliente, prodsParseados);
-    }
+    return await db.query('pedidos', orderBy: 'id DESC');
   }
 
   void _eliminarPedido(int id) async {
@@ -957,350 +807,40 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     await db.delete('pedidos', where: 'id = ?', whereArgs: [id]);
     changeNotifierPedidos.value++;
     setState(() {});
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Pedido eliminado correctamente')),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Historial de Pedidos'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          children: [
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Buscar por cliente, número o producto...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (val) {
-                setState(() {
-                  _filtroTexto = val.trim().toLowerCase();
-                });
-              },
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: DatabaseHelper.instance.database.then((db) => db.query('pedidos', orderBy: 'id DESC')),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                  final pedidos = snapshot.data!;
-                  
-                  final pedidosFiltrados = pedidos.where((p) {
-                    final num = p['numero_pedido'].toString().toLowerCase();
-                    final cli = p['cliente'].toString().toLowerCase();
-                    final prods = p['productos_json'].toString().toLowerCase();
-                    return num.contains(_filtroTexto) || cli.contains(_filtroTexto) || prods.contains(_filtroTexto);
-                  }).toList();
-
-                  if (pedidosFiltrados.isEmpty) {
-                    return const Center(child: Text('No hay pedidos registrados', style: TextStyle(color: Colors.grey)));
-                  }
-
-                  return ListView.builder(
-                    itemCount: pedidosFiltrados.length,
-                    itemBuilder: (context, index) {
-                      final p = pedidosFiltrados[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 6),
-                        child: InkWell(
-                          onTap: () => _mostrarOpcionesPedido(p),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${p['numero_pedido']} - ${p['cliente']}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo),
-                                ),
-                                const Divider(height: 8),
-                                Text('${p['productos_json']}', style: const TextStyle(fontSize: 13)),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Fecha: ${p['fecha']} | Total: L ${(p['total'] as num).toStringAsFixed(2)}',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-// ==========================================
-// 3. PESTAÑA: GESTIÓN DE CLIENTES
-// ==========================================
-class VistaGestionClientes extends StatefulWidget {
-  const VistaGestionClientes({super.key});
-
-  @override
-  State<VistaGestionClientes> createState() => _VistaGestionClientesState();
-}
-
-class _VistaGestionClientesState extends State<VistaGestionClientes> {
-  bool _sincronizando = false;
-
-  Future<void> _sincronizar() async {
-    setState(() => _sincronizando = true);
-    try {
-      final response = await http.get(Uri.parse(urlClientesCSV));
-      if (response.statusCode == 200) {
-        await DatabaseHelper.instance.sincronizarClientesDesdeCSV(response.body);
-        if(!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Clientes sincronizados correctamente')));
-      } else {
-        throw Exception('Error al conectar con la hoja');
-      }
-    } catch (e) {
-      if(!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error de sincronización: $e')));
-    } finally {
-      setState(() => _sincronizando = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Gestión de Clientes'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.sync),
-            onPressed: _sincronizando ? null : _sincronizar,
-            tooltip: 'Sincronizar desde Google Sheets',
-          ),
-        ],
-      ),
-      body: _sincronizando
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: DatabaseHelper.instance.database.then((db) => db.query('clientes')),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                  final clientes = snapshot.data!;
-                  if (clientes.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text('No hay clientes locales. Sincroniza desde Sheets.'),
-                          const SizedBox(height: 10),
-                          ElevatedButton(onPressed: _sincronizar, child: const Text('Sincronizar Ahora')),
-                        ],
-                      ),
-                    );
-                  }
-                  return ListView.builder(
-                    itemCount: clientes.length,
-                    itemBuilder: (context, index) {
-                      final c = clientes[index];
-                      return Card(
-                        child: ListTile(
-                          title: Text(c['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('Cod: ${c['codigo']} | Tel: ${c['telefono']}'),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-    );
-  }
-}
-
-// ==========================================
-// 4. PESTAÑA: GESTIÓN DE PRODUCTOS
-// ==========================================
-class VistaGestionProductos extends StatefulWidget {
-  const VistaGestionProductos({super.key});
-
-  @override
-  State<VistaGestionProductos> createState() => _VistaGestionProductosState();
-}
-
-class _VistaGestionProductosState extends State<VistaGestionProductos> {
-  bool _sincronizando = false;
-
-  Future<void> _sincronizar() async {
-    setState(() => _sincronizando = true);
-    try {
-      final response = await http.get(Uri.parse(urlProductosCSV));
-      if (response.statusCode == 200) {
-        await DatabaseHelper.instance.sincronizarProductosDesdeCSV(response.body);
-        if(!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Productos sincronizados correctamente')));
-      } else {
-        throw Exception('Error al conectar con la hoja');
-      }
-    } catch (e) {
-      if(!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error de sincronización: $e')));
-    } finally {
-      setState(() => _sincronizando = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Gestión de Productos'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.sync),
-            onPressed: _sincronizando ? null : _sincronizar,
-            tooltip: 'Sincronizar desde Google Sheets',
-          ),
-        ],
-      ),
-      body: _sincronizando
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: DatabaseHelper.instance.database.then((db) => db.query('productos')),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                  final productos = snapshot.data!;
-                  if (productos.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text('No hay productos locales. Sincroniza desde Sheets.'),
-                          const SizedBox(height: 10),
-                          ElevatedButton(onPressed: _sincronizar, child: const Text('Sincronizar Ahora')),
-                        ],
-                      ),
-                    );
-                  }
-                  return ListView.builder(
-                    itemCount: productos.length,
-                    itemBuilder: (context, index) {
-                      final p = productos[index];
-                      return Card(
-                        child: ListTile(
-                          title: Text(p['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('Cod: ${p['codigo']}'),
-                          trailing: Text('L ${(p['precio'] as num).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-    );
-  }
-}
-
-// ==========================================
-// 5. PESTAÑA: RESUMEN GENERAL
-// ==========================================
-class VistaResumenGeneral extends StatefulWidget {
-  const VistaResumenGeneral({super.key});
-
-  @override
-  State<VistaResumenGeneral> createState() => _VistaResumenGeneralState();
-}
-
-class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
-  @override
-  void initState() {
-    super.initState();
-    changeNotifierPedidos.addListener(_refrescar);
-  }
-
-  @override
-  void dispose() {
-    changeNotifierPedidos.removeListener(_refrescar);
-    super.dispose();
-  }
-
-  void _refrescar() {
-    if (mounted) setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Resumen General'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-      ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: DatabaseHelper.instance.database.then((db) => db.query('pedidos')),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final pedidos = snapshot.data!;
-          double totalVentas = 0;
-          for (var p in pedidos) {
-            totalVentas += (p['total'] as num).toDouble();
-          }
-
-          return Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Card(
-                  elevation: 4,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      children: [
-                        const Text('Total de Pedidos Registrados', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                        const SizedBox(height: 8),
-                        Text('${pedidos.length}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.indigo)),
-                      ],
+      appBar: AppBar(title: const Text('Historial de Pedidos'), backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+      body: ValueListenableBuilder<int>(
+        valueListenable: changeNotifierPedidos,
+        builder: (context, _, __) {
+          return FutureBuilder<List<Map<String, dynamic>>>(
+            future: _cargarPedidos(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+              final pedidos = snapshot.data!;
+              if (pedidos.isEmpty) {
+                return const Center(child: Text('No hay pedidos registrados', style: TextStyle(color: Colors.grey)));
+              }
+              return ListView.builder(
+                itemCount: pedidos.length,
+                itemBuilder: (context, index) {
+                  final p = pedidos[index];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    child: ListTile(
+                      title: Text('${p['numero_pedido']} - ${p['cliente']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Productos: ${p['productos_json']}\nFecha: ${p['fecha']}'),
+                      isThreeLine: true,
+                      trailing: Text('L ${p['total'].toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo, fontSize: 14)),
+                      onLongPress: () => _eliminarPedido(p['id']),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Card(
-                  elevation: 4,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      children: [
-                        const Text('Monto Global de Ventas', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                        const SizedBox(height: 8),
-                        Text('L ${totalVentas.toStringAsFixed(2)}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.green)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+                  );
+                },
+              );
+            },
           );
         },
       ),
@@ -1309,211 +849,314 @@ class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
 }
 
 // ==========================================
-// 6. PESTAÑA: RESUMEN POR PRODUCTO
+// 3. VISTA GESTIÓN DE CLIENTES Y PRODUCTOS
 // ==========================================
-class VistaResumenProductos extends StatefulWidget {
-  const VistaResumenProductos({super.key});
-
+class VistaGestionClientes extends StatefulWidget {
+  const VistaGestionClientes({super.key});
   @override
-  State<VistaResumenProductos> createState() => _VistaResumenProductosState();
+  State<VistaGestionClientes> createState() => _VistaGestionClientesState();
 }
 
-class _VistaResumenProductosState extends State<VistaResumenProductos> {
-  int _criterioOrden = 0; // 0 = Unidades, 1 = Valor
+class _VistaGestionClientesState extends State<VistaGestionClientes> {
+  bool cargando = false;
 
-  @override
-  void initState() {
-    super.initState();
-    changeNotifierPedidos.addListener(_refrescar);
-  }
-
-  @override
-  void dispose() {
-    changeNotifierPedidos.removeListener(_refrescar);
-    super.dispose();
-  }
-
-  void _refrescar() {
-    if (mounted) setState(() {});
+  Future<void> _sincronizar() async {
+    setState(() => cargando = true);
+    try {
+      final response = await http.get(Uri.parse(urlClientesCSV));
+      if (response.statusCode == 200) {
+        await DatabaseHelper.instance.sincronizarClientesDesdeCSV(response.body);
+        if(!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('¡Clientes sincronizados con Google Sheets!')));
+        setState(() {});
+      }
+    } catch (e) {
+      if(!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al sincronizar: $e')));
+    } finally {
+      setState(() => cargando = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Resumen por Producto'),
-        backgroundColor: Colors.indigo,
+        title: const Text('Gestión de Clientes'), 
+        backgroundColor: Colors.indigo, 
         foregroundColor: Colors.white,
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Ranking de Productos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                ToggleButtons(
-                  isSelected: [_criterioOrden == 0, _criterioOrden == 1],
-                  onPressed: (index) => setState(() => _criterioOrden = index),
-                  borderRadius: BorderRadius.circular(8),
-                  selectedColor: Colors.white,
-                  fillColor: Colors.indigo,
-                  children: const [
-                    Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('Unidades')),
-                    Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('Valor (L)')),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: DatabaseHelper.instance.database.then((db) => db.query('pedidos')),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                final pedidos = snapshot.data!;
-
-                Map<String, Map<String, dynamic>> resumenMap = {};
-
-                for (var pedido in pedidos) {
-                  String prodStr = pedido['productos_json'] ?? '';
-                  var partes = prodStr.split(';');
-                  for (var parte in partes) {
-                    parte = parte.trim();
-                    if (parte.isEmpty) continue;
-
-                    int idxParentesis = parte.lastIndexOf('(x');
-                    String nombreYCom = idxParentesis != -1 ? parte.substring(0, idxParentesis).trim() : parte;
-                    
-                    String nombreLimpio = nombreYCom;
-                    if (nombreLimpio.contains('[')) {
-                      nombreLimpio = nombreLimpio.substring(0, nombreLimpio.indexOf('[')).trim();
-                    }
-
-                    int cantidad = 1;
-                    if (idxParentesis != -1) {
-                      String cantStr = parte.substring(idxParentesis + 2).replaceAll(')', '').trim();
-                      cantidad = int.tryParse(cantStr) ?? 1;
-                    }
-
-                    if (!resumenMap.containsKey(nombreLimpio)) {
-                      resumenMap[nombreLimpio] = {
-                        'nombre': nombreLimpio,
-                        'unidades': 0,
-                        'valor': 0.0,
-                      };
-                    }
-
-                    resumenMap[nombreLimpio]!['unidades'] += cantidad;
-                  }
-                }
-
-                return FutureBuilder<List<Map<String, dynamic>>>(
-                  future: DatabaseHelper.instance.database.then((db) => db.query('productos')),
-                  builder: (context, prodSnapshot) {
-                    if (!prodSnapshot.hasData) return const Center(child: CircularProgressIndicator());
-                    final catProductos = prodSnapshot.data!;
-                    Map<String, double> mapaPrecios = {};
-                    for (var cp in catProductos) {
-                      mapaPrecios[cp['nombre'].toString().trim()] = (cp['precio'] as num).toDouble();
-                    }
-
-                    List<Map<String, dynamic>> listaResumen = [];
-                    resumenMap.forEach((nombre, datos) {
-                      double precioUnitario = mapaPrecios[nombre] ?? 0.0;
-                      int unidades = datos['unidades'];
-                      double valorTotal = unidades * precioUnitario;
-
-                      listaResumen.add({
-                        'nombre': nombre,
-                        'unidades': unidades,
-                        'valor': valorTotal,
-                      });
-                    });
-
-                    if (_criterioOrden == 0) {
-                      listaResumen.sort((a, b) => b['unidades'].compareTo(a['unidades']));
-                    } else {
-                      listaResumen.sort((a, b) => b['valor'].compareTo(a['valor']));
-                    }
-
-                    if (listaResumen.isEmpty) {
-                      return const Center(child: Text('No hay datos suficientes para el ranking', style: TextStyle(color: Colors.grey)));
-                    }
-
-                    return ListView.builder(
-                      itemCount: listaResumen.length,
-                      itemBuilder: (context, index) {
-                        final r = listaResumen[index];
-                        return Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          child: ListTile(
-                            title: Text(r['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            subtitle: Text('Unidades: ${r['unidades']}', style: const TextStyle(fontSize: 12)),
-                            trailing: Text('L ${r['valor'].toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo, fontSize: 14)),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            ),
-          ),
+        actions: [
+          IconButton(icon: const Icon(Icons.sync), onPressed: cargando ? null : _sincronizar, tooltip: 'Sincronizar Sheets')
         ],
       ),
+      body: cargando 
+        ? const Center(child: CircularProgressIndicator()) 
+        : FutureBuilder<List<Map<String, dynamic>>>(
+            future: DatabaseHelper.instance.database.then((db) => db.query('clientes')),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+              final lista = snapshot.data!;
+              if (lista.isEmpty) return const Center(child: Text('No hay clientes. Sincroniza desde Google Sheets.'));
+              return ListView.builder(
+                itemCount: lista.length,
+                itemBuilder: (context, i) {
+                  final c = lista[i];
+                  return ListTile(
+                    title: Text(c['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text('Cod: ${c['codigo']} | Tel: ${c['telefono']}'),
+                  );
+                },
+              );
+            },
+          ),
+    );
+  }
+}
+
+class VistaGestionProductos extends StatefulWidget {
+  const VistaGestionProductos({super.key});
+  @override
+  State<VistaGestionProductos> createState() => _VistaGestionProductosState();
+}
+
+class _VistaGestionProductosState extends State<VistaGestionProductos> {
+  bool cargando = false;
+
+  Future<void> _sincronizar() async {
+    setState(() => cargando = true);
+    try {
+      final response = await http.get(Uri.parse(urlProductosCSV));
+      if (response.statusCode == 200) {
+        await DatabaseHelper.instance.sincronizarProductosDesdeCSV(response.body);
+        if(!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('¡Productos sincronizados con Google Sheets!')));
+        setState(() {});
+      }
+    } catch (e) {
+      if(!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al sincronizar: $e')));
+    } finally {
+      setState(() => cargando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Gestión de Productos'), 
+        backgroundColor: Colors.indigo, 
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(icon: const Icon(Icons.sync), onPressed: cargando ? null : _sincronizar, tooltip: 'Sincronizar Sheets')
+        ],
+      ),
+      body: cargando 
+        ? const Center(child: CircularProgressIndicator()) 
+        : FutureBuilder<List<Map<String, dynamic>>>(
+            future: DatabaseHelper.instance.database.then((db) => db.query('productos')),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+              final lista = snapshot.data!;
+              if (lista.isEmpty) return const Center(child: Text('No hay productos. Sincroniza desde Google Sheets.'));
+              return ListView.builder(
+                itemCount: lista.length,
+                itemBuilder: (context, i) {
+                  final p = lista[i];
+                  return ListTile(
+                    title: Text(p['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text('Cod: ${p['codigo']}'),
+                    trailing: Text('L ${p['precio'].toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+                  );
+                },
+              );
+            },
+          ),
     );
   }
 }
 
 // ==========================================
-// 7. PESTAÑA: EXPORTAR PDF
+// 4. RESÚMENES (GENERAL Y PRODUCTOS)
+// ==========================================
+class VistaResumenGeneral extends StatelessWidget {
+  const VistaResumenGeneral({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Resumen General'), backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+      body: ValueListenableBuilder<int>(
+        valueListenable: changeNotifierPedidos,
+        builder: (context, _, __) {
+          return FutureBuilder<List<Map<String, dynamic>>>(
+            future: DatabaseHelper.instance.database.then((db) => db.query('pedidos')),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+              final pedidos = snapshot.data!;
+              double totalVentas = pedidos.fold(0.0, (sum, p) => sum + (p['total'] as num).toDouble());
+              return Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    Card(
+                      color: Colors.indigo.shade50,
+                      child: Padding(
+                        padding: const EdgeInsets.all(20.0),
+                        child: Column(
+                          children: [
+                            const Text('Total General Acumulado', style: TextStyle(fontSize: 16, color: Colors.indigo, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 10),
+                            Text('L ${totalVentas.toStringAsFixed(2)}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.indigo)),
+                            const SizedBox(height: 5),
+                            Text('Pedidos realizados: ${pedidos.length}', style: const TextStyle(fontSize: 14, color: Colors.grey)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class VistaResumenProductos extends StatelessWidget {
+  const VistaResumenProductos({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Resumen por Productos'), backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+      body: const Center(child: Text('Estadísticas agrupadas por producto vendido')),
+    );
+  }
+}
+
+// ==========================================
+// 5. NUEVA PESTAÑA: EXPORTAR PEDIDOS A PDF
 // ==========================================
 class VistaExportarPdf extends StatelessWidget {
   const VistaExportarPdf({super.key});
 
+  Future<void> _generarYCompartirPdf(BuildContext context, Map<String, dynamic> pedido) async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.all(32),
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Encabezado de la Factura
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('COMPROBANTE DE PEDIDO', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(pedido['numero_pedido'], style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('Fecha: ${pedido['fecha']}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                    ],
+                  ),
+                ],
+              ),
+              pw.Divider(thickness: 1.5, color: PdfColors.indigo),
+              pw.SizedBox(height: 10),
+
+              // Datos del Cliente
+              pw.Text('Cliente:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+              pw.Text(pedido['cliente'], style: const pw.TextStyle(fontSize: 14)),
+              pw.SizedBox(height: 20),
+
+              // Detalle de Productos
+              pw.Text('Detalle de Productos:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+              pw.SizedBox(height: 8),
+              pw.Container(
+                padding: const EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey400),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                ),
+                child: pw.Text(pedido['productos_json'], style: const pw.TextStyle(fontSize: 12)),
+              ),
+              pw.SizedBox(height: 30),
+
+              // Total del Pedido
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.end,
+                children: [
+                  pw.Text('TOTAL: L ${pedido['total'].toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo)),
+                ],
+              ),
+              
+              pw.Spacer(),
+
+              // Pie de página
+              pw.Center(
+                child: pw.Text('Gracias por su preferencia', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    // Compartir o abrir el PDF mediante la librería printing
+    await Printing.sharePdf(
+      bytes: await pdf.save(),
+      filename: '${pedido['numero_pedido'].replaceAll(' ', '_')}.pdf',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Exportar Reporte PDF'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.picture_as_pdf, size: 64, color: Colors.indigo),
-              const SizedBox(height: 16),
-              const Text(
-                'Generación de Reportes PDF',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Aquí implementaremos próximamente las opciones de exportación por fecha y por número de pedido.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Próximamente: Filtros por fecha y número de pedido')),
+      appBar: AppBar(title: const Text('Exportar Pedidos a PDF'), backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+      body: ValueListenableBuilder<int>(
+        valueListenable: changeNotifierPedidos,
+        builder: (context, _, __) {
+          return FutureBuilder<List<Map<String, dynamic>>>(
+            future: DatabaseHelper.instance.database.then((db) => db.query('pedidos', orderBy: 'id DESC')),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+              final pedidos = snapshot.data!;
+              if (pedidos.isEmpty) {
+                return const Center(child: Text('No hay pedidos disponibles para exportar', style: TextStyle(color: Colors.grey)));
+              }
+              return ListView.builder(
+                itemCount: pedidos.length,
+                itemBuilder: (context, index) {
+                  final p = pedidos[index];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    child: ListTile(
+                      title: Text('${p['numero_pedido']} - ${p['cliente']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Fecha: ${p['fecha']} | Total: L ${p['total'].toStringAsFixed(2)}'),
+                      trailing: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                        icon: const Icon(Icons.picture_as_pdf, size: 16),
+                        label: const Text('PDF'),
+                        onPressed: () => _generarYCompartirPdf(context, p),
+                      ),
+                    ),
                   );
                 },
-                icon: const Icon(Icons.print),
-                label: const Text('Generar PDF'),
-              ),
-            ],
-          ),
-        ),
+              );
+            },
+          );
+        },
       ),
     );
   }
