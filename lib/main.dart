@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
 // Notificador global para actualizar datos en tiempo real entre pestañas
-final ValueNotifier<int> changeNotifierPedidos = ValueNotifier<int>(0);
+final ValueNotifier<int> changeNotifierPedidos = ValueNotifier<int>(0); 
 
 // URLs de Google Sheets (Reemplaza con tus enlaces CSV publicados)
 const String urlClientesCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=0&single=true&output=csv';
