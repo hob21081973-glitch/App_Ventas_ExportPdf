@@ -1084,7 +1084,8 @@ class VistaExportarPdf extends StatelessWidget {
               pw.Text('Detalle de Productos:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
               pw.SizedBox(height: 8),
               pw.Container(
-                padding: const EdgeInsets.all(10),
+                // CORREGIDO: Se agregó el prefijo pw. para evitar el conflicto
+                padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(
                   border: pw.Border.all(color: PdfColors.grey400),
                   borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
