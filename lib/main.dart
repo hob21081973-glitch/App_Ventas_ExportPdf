@@ -53,7 +53,6 @@ class DatabaseHelper {
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = '$dbPath/$filePath';
-
     return await openDatabase(
       path,
       version: 1,
@@ -69,7 +68,6 @@ class DatabaseHelper {
         telefono TEXT
       )
     ''');
-
     await db.execute('''
       CREATE TABLE productos (
         codigo TEXT PRIMARY KEY,
@@ -77,7 +75,6 @@ class DatabaseHelper {
         precio REAL
       )
     ''');
-
     await db.execute('''
       CREATE TABLE pedidos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -298,8 +295,9 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
       0.0, 
       (sum, item) => sum + ((item['precio'] as num).toDouble() * (item['cantidad'] as num).toDouble())
     );
-    String fecha = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
 
+    String fecha = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
+    
     String productosStr = mainState.productosEnCurso.map((p) {
       String com = (p['comentario'] != null && p['comentario'].toString().trim().isNotEmpty)
           ? ' [${p['comentario']}]'
@@ -486,7 +484,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                                           var existenteIndex = mainState.productosEnCurso.indexWhere(
                                             (item) => item['nombre'] == p['nombre'],
                                           );
-
                                           if (existenteIndex != -1) {
                                             mainState.productosEnCurso[existenteIndex]['cantidad']++;
                                           } else {
@@ -524,7 +521,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
   void _pedirComentario(int index) {
     final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
     if (mainState == null) return;
-
     TextEditingController comCtrl = TextEditingController(text: mainState.productosEnCurso[index]['comentario'] ?? '');
     showDialog(
       context: context,
@@ -554,7 +550,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
   void _mostrarDialogoGestionProducto(int index) {
     final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
     if (mainState == null) return;
-
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -738,12 +733,14 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(item['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                        // DESCRIPCIÓN CON TAMAÑO -25% (aprox 10.5-11 px)
+                                        Text(item['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                                         const SizedBox(height: 2),
-                                        Text('Cant: ${item['cantidad']} x L ${item['precio']}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                        // CANTIDADES Y PRECIOS CON TAMAÑO +50% (aprox 15-18 px)
+                                        Text('Cant: ${item['cantidad']} x L ${item['precio']}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black87)),
                                         if (comText.isNotEmpty) ...[
                                           const SizedBox(height: 2),
-                                          Text('Detalle: $comText', style: const TextStyle(fontSize: 12, color: Colors.indigo, fontStyle: FontStyle.italic)),
+                                          Text('Detalle: $comText', style: const TextStyle(fontSize: 10, color: Colors.indigo, fontStyle: FontStyle.italic)),
                                         ],
                                       ],
                                     ),
@@ -755,7 +752,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                                     padding: const EdgeInsets.all(4.0),
                                     child: Text(
                                       'L ${(item['precio'] * item['cantidad']).toStringAsFixed(2)}', 
-                                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.indigo),
+                                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.indigo),
                                     ),
                                   ),
                                 ),
@@ -787,7 +784,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
 }
 
 // ==========================================
-// 2. VISTA HISTORIAL DE PEDIDOS (Continuación)
+// 2. VISTA HISTORIAL DE PEDIDOS
 // ==========================================
 class VistaHistorialPedidos extends StatefulWidget {
   const VistaHistorialPedidos({super.key});
@@ -841,24 +838,17 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
   }
 
   void _editarPedido(Map<String, dynamic> pedido) {
-    // Reconstruir los productos desde la cadena guardada o estructurada
-    // Para simplificar la edición rápida desde el historial, se puede pasar el texto o parsearlo.
-    // Como productos_json guarda un string formateado, vamos a extraer los datos básicos.
-    // O mejor aún, parseamos el string de productos.
     List<Map<String, dynamic>> productosEdit = [];
     String prodStr = pedido['productos_json'] ?? '';
-    // Ejemplo de formato guardado: "Producto A [Comentario] (x2); Producto B (x1)"
     List<String> items = prodStr.split(';');
     for (var item in items) {
       item = item.trim();
       if (item.isEmpty) continue;
-      // Parseo básico inverso
       try {
         int xIndex = item.lastIndexOf('(x');
         String nombreYCom = item.substring(0, xIndex).trim();
         String cantStr = item.substring(xIndex + 2, item.length - 1).trim();
         int cant = int.tryParse(cantStr) ?? 1;
-
         String nombre = nombreYCom;
         String comentario = '';
         if (nombreYCom.contains('[') && nombreYCom.endsWith(']')) {
@@ -866,17 +856,15 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
           nombre = nombreYCom.substring(0, openBr).trim();
           comentario = nombreYCom.substring(openBr + 1, nombreYCom.length - 1).trim();
         }
-
         productosEdit.add({
           'nombre': nombre,
-          'precio': 0.0, // Se actualizará o se mantendrá de referencia si se busca en la base, aquí ponemos 0 o un estimado si no hay precio unitario directo en el texto.
+          'precio': 0.0,
           'cantidad': cant,
           'comentario': comentario,
         });
       } catch (_) {}
     }
 
-    // Buscamos los precios reales desde la base de datos para los productos cargados
     DatabaseHelper.instance.database.then((db) async {
       for (var p in productosEdit) {
         var res = await db.query('productos', where: 'nombre = ?', whereArgs: [p['nombre']]);
@@ -884,7 +872,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
           p['precio'] = (res.first['precio'] as num).toDouble();
         }
       }
-
       final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
       if (mainState != null) {
         mainState.cargarPedidoParaEditar(
@@ -974,6 +961,11 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                                   Row(
                                     children: [
                                       IconButton(
+                                        icon: const Icon(Icons.receipt, color: Colors.teal, size: 20),
+                                        tooltip: 'Ver Comprobante Individual',
+                                        onPressed: () => generarPdfComprobantePedido(context, p),
+                                      ),
+                                      IconButton(
                                         icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
                                         tooltip: 'Editar Pedido',
                                         onPressed: () => _editarPedido(p),
@@ -1043,7 +1035,6 @@ class _VistaGestionClientesState extends State<VistaGestionClientes> {
     try {
       final response = await http.get(Uri.parse(urlClientesCSV));
       if (response.statusCode == 200) {
-        // Decodificar asegurando UTF-8 si es necesario
         String body = utf8.decode(response.bodyBytes);
         await DatabaseHelper.instance.sincronizarClientesDesdeCSV(body);
         if (!mounted) return;
@@ -1089,7 +1080,7 @@ class _VistaGestionClientesState extends State<VistaGestionClientes> {
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                 final clientes = snapshot.data!;
                 if (clientes.isEmpty) {
-                  const Center(child: Text('No hay clientes. Sincroniza desde Google Sheets.'));
+                  return const Center(child: Text('No hay clientes. Sincroniza desde Google Sheets.'));
                 }
                 return ListView.builder(
                   itemCount: clientes.length,
@@ -1245,13 +1236,16 @@ class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
           
           double totalVentas = 0;
           Map<String, double> ventasPorCliente = {};
-
           for (var p in pedidos) {
             double t = (p['total'] as num).toDouble();
             totalVentas += t;
             String cliente = p['cliente'] ?? 'Desconocido';
             ventasPorCliente[cliente] = (ventasPorCliente[cliente] ?? 0) + t;
           }
+
+          // ORDENAR CLIENTES DE MAYOR A MENOR MONTO VENDIDO
+          var clientesOrdenados = ventasPorCliente.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value));
 
           return Padding(
             padding: const EdgeInsets.all(16.0),
@@ -1272,13 +1266,13 @@ class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text('Ventas por Cliente:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Text('Ventas por Cliente (De mayor a menor):', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const Divider(),
                 Expanded(
-                  child: ventasPorCliente.isEmpty
+                  child: clientesOrdenados.isEmpty
                       ? const Center(child: Text('Sin datos de ventas'))
                       : ListView(
-                          children: ventasPorCliente.entries.map((e) {
+                          children: clientesOrdenados.map((e) {
                             return ListTile(
                               title: Text(e.key, style: const TextStyle(fontWeight: FontWeight.bold)),
                               trailing: Text('L ${e.value.toStringAsFixed(2)}', style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.bold)),
@@ -1335,9 +1329,7 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           final pedidos = snapshot.data!;
-
           Map<String, int> cantidadesPorProducto = {};
-
           for (var p in pedidos) {
             String prodStr = p['productos_json'] ?? '';
             List<String> items = prodStr.split(';');
@@ -1349,30 +1341,32 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
                 String nombreYCom = item.substring(0, xIndex).trim();
                 String cantStr = item.substring(xIndex + 2, item.length - 1).trim();
                 int cant = int.tryParse(cantStr) ?? 1;
-
                 String nombre = nombreYCom;
                 if (nombreYCom.contains('[') && nombreYCom.endsWith(']')) {
                   int openBr = nombreYCom.lastIndexOf('[');
                   nombre = nombreYCom.substring(0, openBr).trim();
                 }
-
                 cantidadesPorProducto[nombre] = (cantidadesPorProducto[nombre] ?? 0) + cant;
               } catch (_) {}
             }
           }
+
+          // ORDENAR PRODUCTOS DE MAYOR A MENOR CANTIDAD VENDIDA
+          var productosOrdenados = cantidadesPorProducto.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value));
 
           return Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Cantidad Total Vendida por Producto:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Text('Cantidad Total Vendida por Producto (De mayor a menor):', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const Divider(),
                 Expanded(
-                  child: cantidadesPorProducto.isEmpty
+                  child: productosOrdenados.isEmpty
                       ? const Center(child: Text('Sin productos vendidos'))
                       : ListView(
-                          children: cantidadesPorProducto.entries.map((e) {
+                          children: productosOrdenados.map((e) {
                             return ListTile(
                               title: Text(e.key, style: const TextStyle(fontWeight: FontWeight.bold)),
                               trailing: Text('${e.value} unids.', style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.bold, fontSize: 15)),
@@ -1390,17 +1384,70 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
 }
 
 // ==========================================
-// 7. VISTA EXPORTAR PDF
+// 7. VISTA EXPORTAR PDF Y COMPROBANTE
 // ==========================================
-class VistaExportarPdf extends StatelessWidget {
+class VistaExportarPdf extends StatefulWidget {
   const VistaExportarPdf({super.key});
+
+  @override
+  State<VistaExportarPdf> createState() => _VistaExportarPdfState();
+}
+
+class _VistaExportarPdfState extends State<VistaExportarPdf> {
+  DateTime? fechaInicio;
+  DateTime? fechaFin;
+
+  Future<void> _mostrarSelectorRango(BuildContext context) async {
+    DateTime? pickedInicio = await showDatePicker(
+      context: context,
+      initialDate: fechaInicio ?? DateTime.now(),
+      firstDate: DateTime(2023),
+      lastDate: DateTime(2100),
+      helpText: 'Seleccione Fecha de INICIO',
+    );
+    if (pickedInicio == null) return;
+
+    DateTime? pickedFin = await showDatePicker(
+      context: context,
+      initialDate: fechaFin ?? DateTime.now(),
+      firstDate: pickedInicio,
+      lastDate: DateTime(2100),
+      helpText: 'Seleccione Fecha de FIN',
+    );
+    if (pickedFin == null) return;
+
+    setState(() {
+      fechaInicio = DateTime(pickedInicio.year, pickedInicio.month, pickedInicio.day, 0, 0, 0);
+      fechaFin = DateTime(pickedFin.year, pickedFin.month, pickedFin.day, 23, 59, 59);
+    });
+
+    if (!mounted) return;
+    _generarYCompartirPdf(context);
+  }
 
   Future<void> _generarYCompartirPdf(BuildContext context) async {
     final pdf = pw.Document();
     final db = await DatabaseHelper.instance.database;
-    final pedidos = await db.query('pedidos', orderBy: 'id DESC');
+    
+    List<Map<String, dynamic>> pedidos;
+    if (fechaInicio != null && fechaFin != null) {
+      String strInicio = DateFormat('yyyy-MM-dd HH:mm').format(fechaInicio!);
+      String strFin = DateFormat('yyyy-MM-dd HH:mm').format(fechaFin!);
+      pedidos = await db.query(
+        'pedidos',
+        where: 'fecha >= ? AND fecha <= ?',
+        whereArgs: [strInicio, strFin],
+        orderBy: 'id DESC',
+      );
+    } else {
+      pedidos = await db.query('pedidos', orderBy: 'id DESC');
+    }
 
     double totalGeneral = pedidos.fold(0.0, (sum, p) => sum + ((p['total'] as num).toDouble()));
+    
+    String subtituloRango = (fechaInicio != null && fechaFin != null)
+        ? 'Rango: ${DateFormat('dd/MM/yyyy').format(fechaInicio!)} al ${DateFormat('dd/MM/yyyy').format(fechaFin!)}'
+        : 'Todos los registros';
 
     pdf.addPage(
       pw.MultiPage(
@@ -1412,7 +1459,14 @@ class VistaExportarPdf extends StatelessWidget {
               child: pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Reporte General de Pedidos', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Reporte General de Pedidos', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(subtituloRango, style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
+                    ],
+                  ),
                   pw.Text(DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now()), style: const pw.TextStyle(fontSize: 12)),
                 ],
               ),
@@ -1447,7 +1501,6 @@ class VistaExportarPdf extends StatelessWidget {
         },
       ),
     );
-
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
     );
@@ -1475,7 +1528,7 @@ class VistaExportarPdf extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               const Text(
-                'Puedes visualizar, guardar o imprimir todos los pedidos registrados en formato PDF.',
+                'Puedes visualizar, guardar o imprimir todos los pedidos registrados en formato PDF o elegir un rango de fechas.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey, fontSize: 14),
               ),
@@ -1488,12 +1541,121 @@ class VistaExportarPdf extends StatelessWidget {
                 ),
                 onPressed: () => _generarYCompartirPdf(context),
                 icon: const Icon(Icons.print),
-                label: const Text('Generar y Ver PDF', style: TextStyle(fontSize: 16)),
+                label: const Text('Generar Historial Completo', style: TextStyle(fontSize: 16)),
               ),
+              const SizedBox(height: 15),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.indigo,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+                onPressed: () => _mostrarSelectorRango(context),
+                icon: const Icon(Icons.date_range),
+                label: const Text('Generar por Rango de Fechas', style: TextStyle(fontSize: 16)),
+              ),
+              if (fechaInicio != null && fechaFin != null) ...[
+                const SizedBox(height: 15),
+                Text(
+                  'Filtro activo: ${DateFormat('dd/MM/yyyy').format(fechaInicio!)} al ${DateFormat('dd/MM/yyyy').format(fechaFin!)}',
+                  style: const TextStyle(fontSize: 12, color: Colors.indigo, fontWeight: FontWeight.bold),
+                ),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      fechaInicio = null;
+                      fechaFin = null;
+                    });
+                  },
+                  child: const Text('Limpiar filtro de fecha', style: TextStyle(color: Colors.red, fontSize: 12)),
+                ),
+              ],
             ],
           ),
         ),
       ),
     );
   }
+}
+
+// ==========================================
+// FUNCIÓN AUXILIAR: COMPROBANTE DE PEDIDO INDIVIDUAL
+// ==========================================
+Future<void> generarPdfComprobantePedido(BuildContext context, Map<String, dynamic> pedido) async {
+  final pdf = pw.Document();
+  
+  // Parsear productos_json del pedido de forma segura asegurando límite de hasta 25 líneas
+  String prodStr = pedido['productos_json'] ?? '';
+  List<String> lineasRaw = prodStr.split(';');
+  List<List<String>> filasTabla = [];
+  
+  int contadorLineas = 0;
+  for (var item in lineasRaw) {
+    item = item.trim();
+    if (item.isEmpty) continue;
+    if (contadorLineas >= 25) break; // Límite estricto de hasta 25 líneas
+
+    try {
+      int xIndex = item.lastIndexOf('(x');
+      String nombreYCom = item.substring(0, xIndex).trim();
+      String cantStr = item.substring(xIndex + 2, item.length - 1).trim();
+      
+      filasTabla.add([
+        nombreYCom,
+        cantStr,
+      ]);
+      contadorLineas++;
+    } catch (_) {
+      filasTabla.add([item, '1']);
+      contadorLineas++;
+    }
+  }
+
+  pdf.addPage(
+    pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      build: (pw.Context context) {
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('COMPROBANTE DE PEDIDO', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+                pw.Text(pedido['numero_pedido'] ?? '', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo)),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+            pw.Divider(),
+            pw.SizedBox(height: 10),
+            pw.Text('Cliente: ${pedido['cliente'] ?? 'N/A'}', style: const pw.TextStyle(fontSize: 14)),
+            pw.SizedBox(height: 4),
+            pw.Text('Fecha: ${pedido['fecha'] ?? 'N/A'}', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+            pw.SizedBox(height: 20),
+            pw.Table.fromTextArray(
+              headers: ['Descripción del Producto', 'Cantidad'],
+              data: filasTabla,
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
+              cellStyle: const pw.TextStyle(fontSize: 11),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(4),
+                1: const pw.FlexColumnWidth(1),
+              },
+            ),
+            pw.SizedBox(height: 20),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.end,
+              children: [
+                pw.Text('Total: L ${(pedido['total'] as num).toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+              ],
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
+  await Printing.layoutPdf(
+    onLayout: (PdfPageFormat format) async => pdf.save(),
+  );
 }
