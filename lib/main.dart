@@ -131,6 +131,43 @@ class DatabaseHelper {
 }
 
 // ==========================================
+// PDF HELPER (UTILIDAD PARA GENERAR REPORTES)
+// ==========================================
+class PdfHelper {
+  static Future<pw.Document> generarReporteGeneral() async {
+    final pdf = pw.Document();
+    final db = await DatabaseHelper.instance.database;
+    final pedidos = await db.query('pedidos', orderBy: 'id DESC');
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.letter,
+        build: (pw.Context context) {
+          return [
+            pw.Text('Reporte General de Ventas', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 15),
+            pw.Table.fromTextArray(
+              headers: ['Pedido', 'Cliente', 'Productos', 'Total', 'Fecha'],
+              data: pedidos.map((p) => [
+                p['numero_pedido']?.toString() ?? '',
+                p['cliente']?.toString() ?? '',
+                p['productos_json']?.toString() ?? '',
+                'L ${(p['total'] as num?)?.toStringAsFixed(2) ?? '0.00'}',
+                p['fecha']?.toString() ?? '',
+              ]).toList(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
+              cellStyle: const pw.TextStyle(fontSize: 10),
+            ),
+          ];
+        },
+      ),
+    );
+    return pdf;
+  }
+}
+
+// ==========================================
 // MENÚ PRINCIPAL CON PESTAÑAS
 // ==========================================
 class MenuPrincipal extends StatefulWidget {
@@ -733,10 +770,8 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        // DESCRIPCIÓN CON TAMAÑO -25% (aprox 10.5-11 px)
                                         Text(item['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                                         const SizedBox(height: 2),
-                                        // CANTIDADES Y PRECIOS CON TAMAÑO +50% (aprox 15-18 px)
                                         Text('Cant: ${item['cantidad']} x L ${item['precio']}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black87)),
                                         if (comText.isNotEmpty) ...[
                                           const SizedBox(height: 2),
@@ -784,78 +819,75 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
 }
 
 // ==========================================
-// 2. VISTA HISTORIAL DE PEDIDOS
+// 2. PESTAÑA: HISTORIAL DE PEDIDOS
 // ==========================================
 class VistaHistorialPedidos extends StatefulWidget {
   const VistaHistorialPedidos({super.key});
+
   @override
   State<VistaHistorialPedidos> createState() => _VistaHistorialPedidosState();
 }
 
 class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
-  String filtroHistorial = '';
+  String _filtro = '';
 
   @override
   void initState() {
     super.initState();
-    changeNotifierPedidos.addListener(_actualizarLista);
+    changeNotifierPedidos.addListener(_recargar);
   }
 
   @override
   void dispose() {
-    changeNotifierPedidos.removeListener(_actualizarLista);
+    changeNotifierPedidos.removeListener(_recargar);
     super.dispose();
   }
 
-  void _actualizarLista() {
+  void _recargar() {
     if (mounted) setState(() {});
   }
 
-  Future<List<Map<String, dynamic>>> _cargarPedidos() async {
+  Future<List<Map<String, dynamic>>> _obtenerPedidos() async {
     final db = await DatabaseHelper.instance.database;
-    if (filtroHistorial.isEmpty) {
+    if (_filtro.isEmpty) {
       return await db.query('pedidos', orderBy: 'id DESC');
     } else {
       return await db.query(
         'pedidos',
         where: 'cliente LIKE ? OR numero_pedido LIKE ?',
-        whereArgs: ['%$filtroHistorial%', '%$filtroHistorial%'],
+        whereArgs: ['%$_filtro%', '%$_filtro%'],
         orderBy: 'id DESC',
       );
     }
   }
 
-  // NUEVO: Función para resetear todo el historial de pedidos
-  void _resetearHistorial() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Resetear Historial'),
-        content: const Text('¿Estás seguro de borrar todos los pedidos registrados? El conteo volverá a iniciar desde el Pedido #01.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(context);
-              final db = await DatabaseHelper.instance.database;
-              await db.delete('pedidos'); // Borra todos los registros de la tabla pedidos
-              setState(() {});
-              changeNotifierPedidos.value++;
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Historial reseteado. Nuevo conteo iniciado en Pedido #01.')),
-              );
-            },
-            child: const Text('Sí, resetear'),
-          ),
-        ],
-      ),
+  void _eliminarPedido(int id) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.delete('pedidos', where: 'id = ?', whereArgs: [id]);
+    changeNotifierPedidos.value++;
+    setState(() {});
+  }
+
+  void _editarPedido(Map<String, dynamic> pedido) {
+    final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
+    if (mainState == null) return;
+
+    List<Map<String, dynamic>> productosEdit = [];
+    productosEdit.add({
+      'nombre': pedido['productos_json'],
+      'precio': pedido['total'],
+      'cantidad': 1,
+      'comentario': ''
+    });
+
+    mainState.cargarPedidoParaEditar(
+      pedido['id'],
+      pedido['numero_pedido'],
+      pedido['cliente'],
+      productosEdit,
     );
   }
 
-  // ... (mantén el resto de métodos como _eliminarPedido y _editarPedido iguales)
-  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -863,14 +895,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         title: const Text('Historial de Pedidos'),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
-        actions: [
-          // Botón para resetear el historial completo
-          IconButton(
-            icon: const Icon(Icons.delete_sweep, color: Colors.amberAccent),
-            tooltip: 'Resetear Historial',
-            onPressed: _resetearHistorial,
-          ),
-        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -884,23 +908,19 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
               ),
               onChanged: (val) {
                 setState(() {
-                  filtroHistorial = val.trim();
+                  _filtro = val.trim();
                 });
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Expanded(
               child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: _cargarPedidos(),
+                future: _obtenerPedidos(),
                 builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                   final pedidos = snapshot.data!;
                   if (pedidos.isEmpty) {
-                    return const Center(
-                      child: Text('No hay pedidos registrados', style: TextStyle(color: Colors.grey)),
-                    );
+                    return const Center(child: Text('No hay pedidos registrados', style: TextStyle(color: Colors.grey)));
                   }
                   return ListView.builder(
                     itemCount: pedidos.length,
@@ -908,73 +928,20 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                       final p = pedidos[index];
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 6),
-                        child: Padding(
-                          padding: const EdgeInsets.all(10.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        child: ListTile(
+                          title: Text('${p['numero_pedido']} - ${p['cliente']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+                          subtitle: Text('Productos: ${p['productos_json']}\nFecha: ${p['fecha']}\nTotal: L ${(p['total'] as num).toStringAsFixed(2)}', style: const TextStyle(fontSize: 13)),
+                          isThreeLine: true,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    p['numero_pedido'],
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo, fontSize: 15),
-                                  ),
-                                  Text(
-                                    p['fecha'] ?? '',
-                                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                  ),
-                                ],
+                              IconButton(
+                                icon: const Icon(Icons.edit, color: Colors.blue),
+                                onPressed: () => _editarPedido(p),
                               ),
-                              const SizedBox(height: 4),
-                              Text('Cliente: ${p['cliente']}', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
-                              const SizedBox(height: 4),
-                              Text('Productos: ${p['productos_json']}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                              const Divider(height: 12),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Total: L ${(p['total'] as num).toStringAsFixed(2)}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.indigo),
-                                  ),
-                                  Row(
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-                                        tooltip: 'Editar Pedido',
-                                        onPressed: () => _editarPedido(p),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                        tooltip: 'Eliminar Pedido',
-                                        onPressed: () {
-                                          showDialog(
-                                            context: context,
-                                            builder: (context) => AlertDialog(
-                                              title: const Text('Eliminar Pedido'),
-                                              content: Text('¿Desea eliminar el ${p['numero_pedido']}?'),
-                                              actions: [
-                                                TextButton(
-                                                  onPressed: () => Navigator.pop(context),
-                                                  child: const Text('Cancelar'),
-                                                ),
-                                                ElevatedButton(
-                                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                                                  onPressed: () {
-                                                    Navigator.pop(context);
-                                                    _eliminarPedido(p['id']);
-                                                  },
-                                                  child: const Text('Eliminar'),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => _eliminarPedido(p['id']),
                               ),
                             ],
                           ),
@@ -993,7 +960,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
 }
 
 // ==========================================
-// 3. VISTA GESTIÓN DE CLIENTES Y CSV
+// 3. PESTAÑA: GESTIÓN DE CLIENTES
 // ==========================================
 class VistaGestionClientes extends StatefulWidget {
   const VistaGestionClientes({super.key});
@@ -1003,30 +970,24 @@ class VistaGestionClientes extends StatefulWidget {
 }
 
 class _VistaGestionClientesState extends State<VistaGestionClientes> {
-  bool _sincronizando = false;
+  bool _cargando = false;
 
-  Future<void> _sincronizarClientes() async {
-    setState(() => _sincronizando = true);
+  Future<void> _sincronizar() async {
+    setState(() => _cargando = true);
     try {
       final response = await http.get(Uri.parse(urlClientesCSV));
       if (response.statusCode == 200) {
-        String body = utf8.decode(response.bodyBytes);
-        await DatabaseHelper.instance.sincronizarClientesDesdeCSV(body);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Clientes sincronizados con éxito desde Google Sheets')),
-        );
-        setState(() {});
+        await DatabaseHelper.instance.sincronizarClientesDesdeCSV(response.body);
+        if(!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Clientes sincronizados con éxito')));
       } else {
-        throw Exception('Error al descargar CSV (${response.statusCode})');
+        throw Exception('Error al descargar CSV');
       }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error de sincronización: $e')),
-      );
+      if(!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error de sincronización: $e')));
     } finally {
-      setState(() => _sincronizando = false);
+      setState(() => _cargando = false);
     }
   }
 
@@ -1041,47 +1002,59 @@ class _VistaGestionClientesState extends State<VistaGestionClientes> {
           IconButton(
             icon: const Icon(Icons.sync),
             tooltip: 'Sincronizar desde Google Sheets',
-            onPressed: _sincronizando ? null : _sincronizarClientes,
+            onPressed: _cargando ? null : _sincronizar,
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_sincronizando) const LinearProgressIndicator(),
-          Expanded(
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: DatabaseHelper.instance.database.then((db) => db.query('clientes', orderBy: 'nombre ASC')),
+      body: _cargando
+          ? const Center(child: CircularProgressIndicator())
+          : FutureBuilder<List<Map<String, dynamic>>>(
+              future: DatabaseHelper.instance.database.then((db) => db.query('clientes')),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                 final clientes = snapshot.data!;
                 if (clientes.isEmpty) {
-                  return const Center(child: Text('No hay clientes. Sincroniza desde Google Sheets.'));
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('No hay clientes. Sincroniza desde Google Sheets.'),
+                        const SizedBox(height: 10),
+                        ElevatedButton(onPressed: _sincronizar, child: const Text('Sincronizar Ahora'))
+                      ],
+                    ),
+                  );
                 }
                 return ListView.builder(
                   itemCount: clientes.length,
                   itemBuilder: (context, index) {
                     final c = clientes[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.indigo.shade100,
-                        child: Text(c['codigo'] ?? '', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.indigo)),
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      child: ListTile(
+                        title: Text(c['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('Código: ${c['codigo']} | Tel: ${c['telefono']}'),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.phone, color: Colors.green),
+                          onPressed: () async {
+                            final Uri launchUri = Uri(scheme: 'tel', path: c['telefono']);
+                            if (await canLaunchUrl(launchUri)) {
+                              await launchUrl(launchUri);
+                            }
+                          },
+                        ),
                       ),
-                      title: Text(c['nombre'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('Tel: ${c['telefono']}'),
                     );
                   },
                 );
               },
             ),
-          ),
-        ],
-      ),
     );
   }
 }
 
 // ==========================================
-// 4. VISTA GESTIÓN DE PRODUCTOS Y CSV
+// 4. PESTAÑA: GESTIÓN DE PRODUCTOS
 // ==========================================
 class VistaGestionProductos extends StatefulWidget {
   const VistaGestionProductos({super.key});
@@ -1091,30 +1064,24 @@ class VistaGestionProductos extends StatefulWidget {
 }
 
 class _VistaGestionProductosState extends State<VistaGestionProductos> {
-  bool _sincronizando = false;
+  bool _cargando = false;
 
-  Future<void> _sincronizarProductos() async {
-    setState(() => _sincronizando = true);
+  Future<void> _sincronizar() async {
+    setState(() => _cargando = true);
     try {
       final response = await http.get(Uri.parse(urlProductosCSV));
       if (response.statusCode == 200) {
-        String body = utf8.decode(response.bodyBytes);
-        await DatabaseHelper.instance.sincronizarProductosDesdeCSV(body);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Productos sincronizados con éxito desde Google Sheets')),
-        );
-        setState(() {});
+        await DatabaseHelper.instance.sincronizarProductosDesdeCSV(response.body);
+        if(!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Productos sincronizados con éxito')));
       } else {
-        throw Exception('Error al descargar CSV (${response.statusCode})');
+        throw Exception('Error al descargar CSV');
       }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error de sincronización: $e')),
-      );
+      if(!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error de sincronización: $e')));
     } finally {
-      setState(() => _sincronizando = false);
+      setState(() => _cargando = false);
     }
   }
 
@@ -1129,47 +1096,51 @@ class _VistaGestionProductosState extends State<VistaGestionProductos> {
           IconButton(
             icon: const Icon(Icons.sync),
             tooltip: 'Sincronizar desde Google Sheets',
-            onPressed: _sincronizando ? null : _sincronizarProductos,
+            onPressed: _cargando ? null : _sincronizar,
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_sincronizando) const LinearProgressIndicator(),
-          Expanded(
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: DatabaseHelper.instance.database.then((db) => db.query('productos', orderBy: 'nombre ASC')),
+      body: _cargando
+          ? const Center(child: CircularProgressIndicator())
+          : FutureBuilder<List<Map<String, dynamic>>>(
+              future: DatabaseHelper.instance.database.then((db) => db.query('productos')),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                 final productos = snapshot.data!;
                 if (productos.isEmpty) {
-                  return const Center(child: Text('No hay productos. Sincroniza desde Google Sheets.'));
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('No hay productos. Sincroniza desde Google Sheets.'),
+                        const SizedBox(height: 10),
+                        ElevatedButton(onPressed: _sincronizar, child: const Text('Sincronizar Ahora'))
+                      ],
+                    ),
+                  );
                 }
                 return ListView.builder(
                   itemCount: productos.length,
                   itemBuilder: (context, index) {
                     final p = productos[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.indigo.shade100,
-                        child: Text(p['codigo'] ?? '', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.indigo)),
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      child: ListTile(
+                        title: Text(p['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('Código: ${p['codigo']}'),
+                        trailing: Text('L ${(p['precio'] as num).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.indigo)),
                       ),
-                      title: Text(p['nombre'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      trailing: Text('L ${(p['precio'] as num).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
                     );
                   },
                 );
               },
             ),
-          ),
-        ],
-      ),
     );
   }
 }
 
 // ==========================================
-// 5. VISTA RESUMEN GENERAL
+// 5. PESTAÑA: RESUMEN GENERAL
 // ==========================================
 class VistaResumenGeneral extends StatefulWidget {
   const VistaResumenGeneral({super.key});
@@ -1182,17 +1153,26 @@ class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
   @override
   void initState() {
     super.initState();
-    changeNotifierPedidos.addListener(_actualizar);
+    changeNotifierPedidos.addListener(_recargar);
   }
 
   @override
   void dispose() {
-    changeNotifierPedidos.removeListener(_actualizar);
+    changeNotifierPedidos.removeListener(_recargar);
     super.dispose();
   }
 
-  void _actualizar() {
+  void _recargar() {
     if (mounted) setState(() {});
+  }
+
+  Future<Map<String, dynamic>> _obtenerResumen() async {
+    final db = await DatabaseHelper.instance.database;
+    final totalPedidosRes = await db.rawQuery('SELECT COUNT(*) as count, SUM(total) as suma FROM pedidos');
+    var resultado = totalPedidosRes.first;
+    int count = resultado['count'] as int? ?? 0;
+    double suma = (resultado['suma'] as num?)?.toDouble() ?? 0.0;
+    return {'count': count, 'suma': suma};
   }
 
   @override
@@ -1203,57 +1183,42 @@ class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: DatabaseHelper.instance.database.then((db) => db.query('pedidos')),
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: _obtenerResumen(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final pedidos = snapshot.data!;
-          
-          double totalVentas = 0;
-          Map<String, double> ventasPorCliente = {};
-          for (var p in pedidos) {
-            double t = (p['total'] as num).toDouble();
-            totalVentas += t;
-            String cliente = p['cliente'] ?? 'Desconocido';
-            ventasPorCliente[cliente] = (ventasPorCliente[cliente] ?? 0) + t;
-          }
-
-          // ORDENAR CLIENTES DE MAYOR A MENOR MONTO VENDIDO
-          var clientesOrdenados = ventasPorCliente.entries.toList()
-            ..sort((a, b) => b.value.compareTo(a.value));
-
+          final data = snapshot.data!;
           return Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Card(
-                  color: Colors.indigo.shade50,
+                  elevation: 4,
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
                       children: [
-                        const Text('Total General:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        Text('L ${totalVentas.toStringAsFixed(2)}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.indigo)),
+                        const Text('Total de Pedidos Realizados', style: TextStyle(fontSize: 16, color: Colors.grey)),
+                        const SizedBox(height: 10),
+                        Text('${data['count']}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.indigo)),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text('Ventas por Cliente (De mayor a menor):', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const Divider(),
-                Expanded(
-                  child: clientesOrdenados.isEmpty
-                      ? const Center(child: Text('Sin datos de ventas'))
-                      : ListView(
-                          children: clientesOrdenados.map((e) {
-                            return ListTile(
-                              title: Text(e.key, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              trailing: Text('L ${e.value.toStringAsFixed(2)}', style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.bold)),
-                            );
-                          }).toList(),
-                        ),
+                Card(
+                  elevation: 4,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      children: [
+                        const Text('Monto Total Vendido', style: TextStyle(fontSize: 16, color: Colors.grey)),
+                        const SizedBox(height: 10),
+                        Text('L ${(data['suma'] as double).toStringAsFixed(2)}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.green)),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1265,7 +1230,7 @@ class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
 }
 
 // ==========================================
-// 6. VISTA RESUMEN POR PRODUCTOS
+// 6. PESTAÑA: RESUMEN POR PRODUCTO
 // ==========================================
 class VistaResumenProductos extends StatefulWidget {
   const VistaResumenProductos({super.key});
@@ -1278,17 +1243,50 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
   @override
   void initState() {
     super.initState();
-    changeNotifierPedidos.addListener(_actualizar);
+    changeNotifierPedidos.addListener(_recargar);
   }
 
   @override
   void dispose() {
-    changeNotifierPedidos.removeListener(_actualizar);
+    changeNotifierPedidos.removeListener(_recargar);
     super.dispose();
   }
 
-  void _actualizar() {
+  void _recargar() {
     if (mounted) setState(() {});
+  }
+
+  Future<Map<String, int>> _calcularResumenProductos() async {
+    final db = await DatabaseHelper.instance.database;
+    final pedidos = await db.query('pedidos');
+    Map<String, int> conteoProductos = {};
+
+    for (var pedido in pedidos) {
+      String productosJson = pedido['productos_json']?.toString() ?? '';
+      List<String> items = productosJson.split(';');
+      for (var item in items) {
+        item = item.trim();
+        if (item.isEmpty) continue;
+
+        RegExp regExp = RegExp(r'\(x(\d+)\)$');
+        Match? match = regExp.firstMatch(item);
+        int cantidad = 1;
+        String nombreProd = item;
+
+        if (match != null) {
+          cantidad = int.tryParse(match.group(1) ?? '1') ?? 1;
+          nombreProd = item.replaceAll(regExp, '').trim();
+          
+          int bracketIdx = nombreProd.indexOf(' [');
+          if (bracketIdx != -1) {
+            nombreProd = nombreProd.substring(0, bracketIdx).trim();
+          }
+        }
+
+        conteoProductos[nombreProd] = (conteoProductos[nombreProd] ?? 0) + cantidad;
+      }
+    }
+    return conteoProductos;
   }
 
   @override
@@ -1299,58 +1297,39 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: DatabaseHelper.instance.database.then((db) => db.query('pedidos')),
+      body: FutureBuilder<Map<String, int>>(
+        future: _calcularResumenProductos(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final pedidos = snapshot.data!;
-          Map<String, int> cantidadesPorProducto = {};
-          for (var p in pedidos) {
-            String prodStr = p['productos_json'] ?? '';
-            List<String> items = prodStr.split(';');
-            for (var item in items) {
-              item = item.trim();
-              if (item.isEmpty) continue;
-              try {
-                int xIndex = item.lastIndexOf('(x');
-                String nombreYCom = item.substring(0, xIndex).trim();
-                String cantStr = item.substring(xIndex + 2, item.length - 1).trim();
-                int cant = int.tryParse(cantStr) ?? 1;
-                String nombre = nombreYCom;
-                if (nombreYCom.contains('[') && nombreYCom.endsWith(']')) {
-                  int openBr = nombreYCom.lastIndexOf('[');
-                  nombre = nombreYCom.substring(0, openBr).trim();
-                }
-                cantidadesPorProducto[nombre] = (cantidadesPorProducto[nombre] ?? 0) + cant;
-              } catch (_) {}
-            }
+          final resumen = snapshot.data!;
+          if (resumen.isEmpty) {
+            return const Center(child: Text('No hay productos vendidos todavía', style: TextStyle(color: Colors.grey)));
           }
-
-          // ORDENAR PRODUCTOS DE MAYOR A MENOR CANTIDAD VENDIDA
-          var productosOrdenados = cantidadesPorProducto.entries.toList()
+          final listaOrdenada = resumen.entries.toList()
             ..sort((a, b) => b.value.compareTo(a.value));
 
-          return Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Cantidad Total Vendida por Producto (De mayor a menor):', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const Divider(),
-                Expanded(
-                  child: productosOrdenados.isEmpty
-                      ? const Center(child: Text('Sin productos vendidos'))
-                      : ListView(
-                          children: productosOrdenados.map((e) {
-                            return ListTile(
-                              title: Text(e.key, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              trailing: Text('${e.value} unids.', style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.bold, fontSize: 15)),
-                            );
-                          }).toList(),
-                        ),
+          return ListView.builder(
+            itemCount: listaOrdenada.length,
+            itemBuilder: (context, index) {
+              final entry = listaOrdenada[index];
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: ListTile(
+                  title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.indigo.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Total: ${entry.value}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo),
+                    ),
+                  ),
                 ),
-              ],
-            ),
+              );
+            },
           );
         },
       ),
@@ -1359,354 +1338,34 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
 }
 
 // ==========================================
-// 7. VISTA EXPORTAR PDF (Actualizada)
+// 7. PESTAÑA: EXPORTAR PDF
 // ==========================================
-class VistaExportarPdf extends StatefulWidget {
+class VistaExportarPdf extends StatelessWidget {
   const VistaExportarPdf({super.key});
 
-  @override
-  State<VistaExportarPdf> createState() => _VistaExportarPdfState();
-}
-
-class _VistaExportarPdfState extends State<VistaExportarPdf> {
-  bool _generando = false;
-
-  // Diálogo para seleccionar el rango de números de pedido
-  void _mostrarDialogoRangoPedidos() {
-    final TextEditingController ctrlInicio = TextEditingController();
-    final TextEditingController ctrlFin = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Exportar por Rango de Pedidos'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Ingresa el número de pedido inicial y final que deseas exportar:'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrlInicio,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Pedido Inicial (ej. 1)', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrlFin,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Pedido Final (ej. 10)', border: OutlineInputBorder()),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-            onPressed: () async {
-              int ini = int.tryParse(ctrlInicio.text) ?? 0;
-              int fin = int.tryParse(ctrlFin.text) ?? 0;
-              Navigator.pop(context);
-              await _generarReporteRangoPedidos(ini, fin);
-            },
-            child: const Text('Generar PDF'),
-          ),
-        ],
-      ),
+  Future<void> _generarYMostrarPdf(BuildContext context) async {
+    final pdf = await PdfHelper.generarReporteGeneral();
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
     );
-  }
-
-  Future<void> _generarReporteRangoPedidos(int inicio, int fin) async {
-    setState(() => _generando = true);
-    try {
-      final db = await DatabaseHelper.instance.database;
-      // Consultamos todos los pedidos para filtrar por número exacto o rango secuencial
-      final todos = await db.query('pedidos', orderBy: 'id ASC');
-      
-      // Filtramos los pedidos cuyo número esté dentro del rango especificado
-      List<Map<String, dynamic>> pedidosFiltrados = [];
-      for (var p in todos) {
-        String numStr = p['numero_pedido'].toString();
-        // Extraemos los dígitos del número de pedido (ej. "Pedido #03" -> 3)
-        String soloDigitos = numStr.replaceAll(RegExp(r'[^0-9]'), '');
-        int nPedido = int.tryParse(soloDigitos) ?? 0;
-        if (nPedido >= inicio && nPedido <= fin) {
-          pedidosFiltrados.add(p);
-        }
-      }
-
-      if (pedidosFiltrados.isEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se encontraron pedidos en ese rango.')),
-        );
-        return;
-      }
-
-      List<Map<String, dynamic>> listaProdFormat = [];
-      for (var p in pedidosFiltrados) {
-        listaProdFormat.add({
-          'nombre': '${p['numero_pedido']} (${p['cliente']})',
-          'cantidad': 1,
-          'valorTotal': (p['total'] as num).toDouble(),
-        });
-      }
-
-      String? ruta = await PdfHelper.generarYGuardarReporteGeneral(
-        pedidoInicial: inicio,
-        pedidoFinal: fin,
-        listaProductosVendidos: listaProdFormat,
-        nombreArchivo: 'Reporte_Rango_Pedidos_${inicio}_al_$fin.pdf',
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ruta != null ? '¡Guardado en Descargas!' : 'Error al guardar PDF')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-    } finally {
-      if (mounted) setState(() => _generando = false);
-    }
-  }
-
-  Future<void> _generarReporteProductosVendidos() async {
-    setState(() => _generando = true);
-    try {
-      final db = await DatabaseHelper.instance.database;
-      final pedidos = await db.query('pedidos');
-
-      Map<String, int> cantidadesPorProducto = {};
-      Map<String, double> valoresPorProducto = {};
-
-      for (var p in pedidos) {
-        String prodStr = p['productos_json'] ?? '';
-        List<String> items = prodStr.split(';');
-        for (var item in items) {
-          item = item.trim();
-          if (item.isEmpty) continue;
-          try {
-            int xIndex = item.lastIndexOf('(x');
-            String nombreYCom = item.substring(0, xIndex).trim();
-            String cantStr = item.substring(xIndex + 2, item.length - 1).trim();
-            int cant = int.tryParse(cantStr) ?? 1;
-            String nombre = nombreYCom;
-            if (nombreYCom.contains('[') && nombreYCom.endsWith(']')) {
-              int openBr = nombreYCom.lastIndexOf('[');
-              nombre = nombreYCom.substring(0, openBr).trim();
-            }
-            cantidadesPorProducto[nombre] = (cantidadesPorProducto[nombre] ?? 0) + cant;
-          } catch (_) {}
-        }
-      }
-
-      List<Map<String, dynamic>> listaProd = [];
-      cantidadesPorProducto.forEach((nombre, cant) {
-        listaProd.add({
-          'nombre': nombre,
-          'cantidad': cant,
-          'valorTotal': cant.toDouble(), // Usado para ordenar por cantidad o volumen
-        });
-      });
-
-      String? ruta = await PdfHelper.generarYGuardarReporteGeneral(
-        pedidoInicial: 1,
-        pedidoFinal: pedidos.length,
-        listaProductosVendidos: listaProd,
-        nombreArchivo: 'Reporte_Productos_Vendidos.pdf',
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ruta != null ? '¡Reporte de productos guardado en Descargas!' : 'Error al generar')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-    } finally {
-      if (mounted) setState(() => _generando = false);
-    }
-  }
-
-  Future<void> _generarHistorialCompleto() async {
-    setState(() => _generando = true);
-    try {
-      final db = await DatabaseHelper.instance.database;
-      final pedidos = await db.query('pedidos');
-      
-      List<Map<String, dynamic>> lista = pedidos.map((p) => {
-        'nombre': '${p['numero_pedido']} - ${p['cliente']}',
-        'cantidad': 1,
-        'valorTotal': (p['total'] as num).toDouble(),
-      }).toList();
-
-      String? ruta = await PdfHelper.generarYGuardarReporteGeneral(
-        pedidoInicial: 1,
-        pedidoFinal: pedidos.length,
-        listaProductosVendidos: lista,
-        nombreArchivo: 'Historial_Completo_Pedidos.pdf',
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ruta != null ? '¡Historial completo guardado en Descargas!' : 'Error al guardar')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-    } finally {
-      if (mounted) setState(() => _generando = false);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Exportar a PDF'),
+        title: const Text('Exportar PDF'),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: _generando
-              ? const CircularProgressIndicator()
-              : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.picture_as_pdf, size: 70, color: Colors.indigo),
-                    const SizedBox(height: 15),
-                    const Text('Generar Reportes en PDF', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Selecciona el tipo de reporte que deseas descargar directamente a la carpeta de descargas.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey, fontSize: 13),
-                    ),
-                    const SizedBox(height: 25),
-                    
-                    // Botón 1: Historial Completo
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.indigo,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(double.infinity, 48),
-                      ),
-                      onPressed: _generarHistorialCompleto,
-                      icon: const Icon(Icons.print),
-                      label: const Text('Generar Historial Completo'),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Botón 2: Por Rango de Pedidos (Con selectores)
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.indigo,
-                        minimumSize: const Size(double.infinity, 48),
-                        side: const BorderSide(color: Colors.indigo),
-                      ),
-                      onPressed: _mostrarDialogoRangoPedidos,
-                      icon: const Icon(Icons.filter_list),
-                      label: const Text('Generar por Rango de Pedidos'),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Botón 3: Productos Vendidos
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.indigo,
-                        minimumSize: const Size(double.infinity, 48),
-                        side: const BorderSide(color: Colors.indigo),
-                      ),
-                      onPressed: _generarReporteProductosVendidos,
-                      icon: const Icon(Icons.bar_chart),
-                      label: const Text('Generar Reporte de Productos Vendidos'),
-                    ),
-                  ],
-                ),
+        child: ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+          onPressed: () => _generarYMostrarPdf(context),
+          icon: const Icon(Icons.picture_as_pdf),
+          label: const Text('Generar e Imprimir Reporte PDF'),
         ),
       ),
     );
   }
-}
-
-// ==========================================
-// FUNCIÓN AUXILIAR: COMPROBANTE DE PEDIDO INDIVIDUAL
-// ==========================================
-Future<void> generarPdfComprobantePedido(BuildContext context, Map<String, dynamic> pedido) async {
-  final pdf = pw.Document();
-  
-  // Parsear productos_json del pedido de forma segura asegurando límite de hasta 25 líneas
-  String prodStr = pedido['productos_json'] ?? '';
-  List<String> lineasRaw = prodStr.split(';');
-  List<List<String>> filasTabla = [];
-  
-  int contadorLineas = 0;
-  for (var item in lineasRaw) {
-    item = item.trim();
-    if (item.isEmpty) continue;
-    if (contadorLineas >= 25) break; // Límite estricto de hasta 25 líneas
-
-    try {
-      int xIndex = item.lastIndexOf('(x');
-      String nombreYCom = item.substring(0, xIndex).trim();
-      String cantStr = item.substring(xIndex + 2, item.length - 1).trim();
-      
-      filasTabla.add([
-        nombreYCom,
-        cantStr,
-      ]);
-      contadorLineas++;
-    } catch (_) {
-      filasTabla.add([item, '1']);
-      contadorLineas++;
-    }
-  }
-
-  pdf.addPage(
-    pw.Page(
-      pageFormat: PdfPageFormat.a4,
-      build: (pw.Context context) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text('COMPROBANTE DE PEDIDO', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
-                pw.Text(pedido['numero_pedido'] ?? '', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo)),
-              ],
-            ),
-            pw.SizedBox(height: 10),
-            pw.Divider(),
-            pw.SizedBox(height: 10),
-            pw.Text('Cliente: ${pedido['cliente'] ?? 'N/A'}', style: const pw.TextStyle(fontSize: 14)),
-            pw.SizedBox(height: 4),
-            pw.Text('Fecha: ${pedido['fecha'] ?? 'N/A'}', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
-            pw.SizedBox(height: 20),
-            pw.Table.fromTextArray(
-              headers: ['Descripción del Producto', 'Cantidad'],
-              data: filasTabla,
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
-              cellStyle: const pw.TextStyle(fontSize: 11),
-              columnWidths: {
-                0: const pw.FlexColumnWidth(4),
-                1: const pw.FlexColumnWidth(1),
-              },
-            ),
-            pw.SizedBox(height: 20),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.end,
-              children: [
-                pw.Text('Total: L ${(pedido['total'] as num).toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-              ],
-            ),
-          ],
-        );
-      },
-    ),
-  );
-
-  await Printing.layoutPdf(
-    onLayout: (PdfPageFormat format) async => pdf.save(),
-  );
 }
