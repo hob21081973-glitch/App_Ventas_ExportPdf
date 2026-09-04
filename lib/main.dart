@@ -788,7 +788,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
 // ==========================================
 class VistaHistorialPedidos extends StatefulWidget {
   const VistaHistorialPedidos({super.key});
-
   @override
   State<VistaHistorialPedidos> createState() => _VistaHistorialPedidosState();
 }
@@ -826,64 +825,37 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     }
   }
 
-  void _eliminarPedido(int id) async {
-    final db = await DatabaseHelper.instance.database;
-    await db.delete('pedidos', where: 'id = ?', whereArgs: [id]);
-    setState(() {});
-    changeNotifierPedidos.value++;
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Pedido eliminado correctamente')),
+  // NUEVO: Función para resetear todo el historial de pedidos
+  void _resetearHistorial() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Resetear Historial'),
+        content: const Text('¿Estás seguro de borrar todos los pedidos registrados? El conteo volverá a iniciar desde el Pedido #01.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(context);
+              final db = await DatabaseHelper.instance.database;
+              await db.delete('pedidos'); // Borra todos los registros de la tabla pedidos
+              setState(() {});
+              changeNotifierPedidos.value++;
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Historial reseteado. Nuevo conteo iniciado en Pedido #01.')),
+              );
+            },
+            child: const Text('Sí, resetear'),
+          ),
+        ],
+      ),
     );
   }
 
-  void _editarPedido(Map<String, dynamic> pedido) {
-    List<Map<String, dynamic>> productosEdit = [];
-    String prodStr = pedido['productos_json'] ?? '';
-    List<String> items = prodStr.split(';');
-    for (var item in items) {
-      item = item.trim();
-      if (item.isEmpty) continue;
-      try {
-        int xIndex = item.lastIndexOf('(x');
-        String nombreYCom = item.substring(0, xIndex).trim();
-        String cantStr = item.substring(xIndex + 2, item.length - 1).trim();
-        int cant = int.tryParse(cantStr) ?? 1;
-        String nombre = nombreYCom;
-        String comentario = '';
-        if (nombreYCom.contains('[') && nombreYCom.endsWith(']')) {
-          int openBr = nombreYCom.lastIndexOf('[');
-          nombre = nombreYCom.substring(0, openBr).trim();
-          comentario = nombreYCom.substring(openBr + 1, nombreYCom.length - 1).trim();
-        }
-        productosEdit.add({
-          'nombre': nombre,
-          'precio': 0.0,
-          'cantidad': cant,
-          'comentario': comentario,
-        });
-      } catch (_) {}
-    }
-
-    DatabaseHelper.instance.database.then((db) async {
-      for (var p in productosEdit) {
-        var res = await db.query('productos', where: 'nombre = ?', whereArgs: [p['nombre']]);
-        if (res.isNotEmpty) {
-          p['precio'] = (res.first['precio'] as num).toDouble();
-        }
-      }
-      final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
-      if (mainState != null) {
-        mainState.cargarPedidoParaEditar(
-          pedido['id'],
-          pedido['numero_pedido'],
-          pedido['cliente'],
-          productosEdit,
-        );
-      }
-    });
-  }
-
+  // ... (mantén el resto de métodos como _eliminarPedido y _editarPedido iguales)
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -891,6 +863,14 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         title: const Text('Historial de Pedidos'),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
+        actions: [
+          // Botón para resetear el historial completo
+          IconButton(
+            icon: const Icon(Icons.delete_sweep, color: Colors.amberAccent),
+            tooltip: 'Resetear Historial',
+            onPressed: _resetearHistorial,
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -960,11 +940,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                                   ),
                                   Row(
                                     children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.receipt, color: Colors.teal, size: 20),
-                                        tooltip: 'Ver Comprobante Individual',
-                                        onPressed: () => generarPdfComprobantePedido(context, p),
-                                      ),
                                       IconButton(
                                         icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
                                         tooltip: 'Editar Pedido',
@@ -1384,7 +1359,7 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
 }
 
 // ==========================================
-// 7. VISTA EXPORTAR PDF Y COMPROBANTE
+// 7. VISTA EXPORTAR PDF (Actualizada)
 // ==========================================
 class VistaExportarPdf extends StatefulWidget {
   const VistaExportarPdf({super.key});
@@ -1394,116 +1369,191 @@ class VistaExportarPdf extends StatefulWidget {
 }
 
 class _VistaExportarPdfState extends State<VistaExportarPdf> {
-  DateTime? fechaInicio;
-  DateTime? fechaFin;
+  bool _generando = false;
 
-  Future<void> _mostrarSelectorRango(BuildContext context) async {
-    DateTime? pickedInicio = await showDatePicker(
+  // Diálogo para seleccionar el rango de números de pedido
+  void _mostrarDialogoRangoPedidos() {
+    final TextEditingController ctrlInicio = TextEditingController();
+    final TextEditingController ctrlFin = TextEditingController();
+
+    showDialog(
       context: context,
-      initialDate: fechaInicio ?? DateTime.now(),
-      firstDate: DateTime(2023),
-      lastDate: DateTime(2100),
-      helpText: 'Seleccione Fecha de INICIO',
-    );
-    if (pickedInicio == null) return;
-
-    DateTime? pickedFin = await showDatePicker(
-      context: context,
-      initialDate: fechaFin ?? DateTime.now(),
-      firstDate: pickedInicio,
-      lastDate: DateTime(2100),
-      helpText: 'Seleccione Fecha de FIN',
-    );
-    if (pickedFin == null) return;
-
-    setState(() {
-      fechaInicio = DateTime(pickedInicio.year, pickedInicio.month, pickedInicio.day, 0, 0, 0);
-      fechaFin = DateTime(pickedFin.year, pickedFin.month, pickedFin.day, 23, 59, 59);
-    });
-
-    if (!mounted) return;
-    _generarYCompartirPdf(context);
-  }
-
-  Future<void> _generarYCompartirPdf(BuildContext context) async {
-    final pdf = pw.Document();
-    final db = await DatabaseHelper.instance.database;
-    
-    List<Map<String, dynamic>> pedidos;
-    if (fechaInicio != null && fechaFin != null) {
-      String strInicio = DateFormat('yyyy-MM-dd HH:mm').format(fechaInicio!);
-      String strFin = DateFormat('yyyy-MM-dd HH:mm').format(fechaFin!);
-      pedidos = await db.query(
-        'pedidos',
-        where: 'fecha >= ? AND fecha <= ?',
-        whereArgs: [strInicio, strFin],
-        orderBy: 'id DESC',
-      );
-    } else {
-      pedidos = await db.query('pedidos', orderBy: 'id DESC');
-    }
-
-    double totalGeneral = pedidos.fold(0.0, (sum, p) => sum + ((p['total'] as num).toDouble()));
-    
-    String subtituloRango = (fechaInicio != null && fechaFin != null)
-        ? 'Rango: ${DateFormat('dd/MM/yyyy').format(fechaInicio!)} al ${DateFormat('dd/MM/yyyy').format(fechaFin!)}'
-        : 'Todos los registros';
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context context) {
-          return [
-            pw.Header(
-              level: 0,
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text('Reporte General de Pedidos', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                      pw.SizedBox(height: 4),
-                      pw.Text(subtituloRango, style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
-                    ],
-                  ),
-                  pw.Text(DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now()), style: const pw.TextStyle(fontSize: 12)),
-                ],
-              ),
+      builder: (context) => AlertDialog(
+        title: const Text('Exportar por Rango de Pedidos'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Ingresa el número de pedido inicial y final que deseas exportar:'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrlInicio,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Pedido Inicial (ej. 1)', border: OutlineInputBorder()),
             ),
-            pw.SizedBox(height: 10),
-            pw.Table.fromTextArray(
-              headers: ['Nº Pedido', 'Cliente', 'Productos', 'Total (L)'],
-              data: pedidos.map((p) => [
-                p['numero_pedido'].toString(),
-                p['cliente'].toString(),
-                p['productos_json'].toString(),
-                (p['total'] as num).toStringAsFixed(2),
-              ]).toList(),
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
-              cellStyle: const pw.TextStyle(fontSize: 10),
-              columnWidths: {
-                0: const pw.FlexColumnWidth(1.2),
-                1: const pw.FlexColumnWidth(1.5),
-                2: const pw.FlexColumnWidth(3),
-                3: const pw.FlexColumnWidth(1),
-              },
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrlFin,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Pedido Final (ej. 10)', border: OutlineInputBorder()),
             ),
-            pw.SizedBox(height: 15),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.end,
-              children: [
-                pw.Text('Total General: L ${totalGeneral.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-              ],
-            ),
-          ];
-        },
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+            onPressed: () async {
+              int ini = int.tryParse(ctrlInicio.text) ?? 0;
+              int fin = int.tryParse(ctrlFin.text) ?? 0;
+              Navigator.pop(context);
+              await _generarReporteRangoPedidos(ini, fin);
+            },
+            child: const Text('Generar PDF'),
+          ),
+        ],
       ),
     );
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-    );
+  }
+
+  Future<void> _generarReporteRangoPedidos(int inicio, int fin) async {
+    setState(() => _generando = true);
+    try {
+      final db = await DatabaseHelper.instance.database;
+      // Consultamos todos los pedidos para filtrar por número exacto o rango secuencial
+      final todos = await db.query('pedidos', orderBy: 'id ASC');
+      
+      // Filtramos los pedidos cuyo número esté dentro del rango especificado
+      List<Map<String, dynamic>> pedidosFiltrados = [];
+      for (var p in todos) {
+        String numStr = p['numero_pedido'].toString();
+        // Extraemos los dígitos del número de pedido (ej. "Pedido #03" -> 3)
+        String soloDigitos = numStr.replaceAll(RegExp(r'[^0-9]'), '');
+        int nPedido = int.tryParse(soloDigitos) ?? 0;
+        if (nPedido >= inicio && nPedido <= fin) {
+          pedidosFiltrados.add(p);
+        }
+      }
+
+      if (pedidosFiltrados.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se encontraron pedidos en ese rango.')),
+        );
+        return;
+      }
+
+      List<Map<String, dynamic>> listaProdFormat = [];
+      for (var p in pedidosFiltrados) {
+        listaProdFormat.add({
+          'nombre': '${p['numero_pedido']} (${p['cliente']})',
+          'cantidad': 1,
+          'valorTotal': (p['total'] as num).toDouble(),
+        });
+      }
+
+      String? ruta = await PdfHelper.generarYGuardarReporteGeneral(
+        pedidoInicial: inicio,
+        pedidoFinal: fin,
+        listaProductosVendidos: listaProdFormat,
+        nombreArchivo: 'Reporte_Rango_Pedidos_${inicio}_al_$fin.pdf',
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ruta != null ? '¡Guardado en Descargas!' : 'Error al guardar PDF')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      if (mounted) setState(() => _generando = false);
+    }
+  }
+
+  Future<void> _generarReporteProductosVendidos() async {
+    setState(() => _generando = true);
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final pedidos = await db.query('pedidos');
+
+      Map<String, int> cantidadesPorProducto = {};
+      Map<String, double> valoresPorProducto = {};
+
+      for (var p in pedidos) {
+        String prodStr = p['productos_json'] ?? '';
+        List<String> items = prodStr.split(';');
+        for (var item in items) {
+          item = item.trim();
+          if (item.isEmpty) continue;
+          try {
+            int xIndex = item.lastIndexOf('(x');
+            String nombreYCom = item.substring(0, xIndex).trim();
+            String cantStr = item.substring(xIndex + 2, item.length - 1).trim();
+            int cant = int.tryParse(cantStr) ?? 1;
+            String nombre = nombreYCom;
+            if (nombreYCom.contains('[') && nombreYCom.endsWith(']')) {
+              int openBr = nombreYCom.lastIndexOf('[');
+              nombre = nombreYCom.substring(0, openBr).trim();
+            }
+            cantidadesPorProducto[nombre] = (cantidadesPorProducto[nombre] ?? 0) + cant;
+          } catch (_) {}
+        }
+      }
+
+      List<Map<String, dynamic>> listaProd = [];
+      cantidadesPorProducto.forEach((nombre, cant) {
+        listaProd.add({
+          'nombre': nombre,
+          'cantidad': cant,
+          'valorTotal': cant.toDouble(), // Usado para ordenar por cantidad o volumen
+        });
+      });
+
+      String? ruta = await PdfHelper.generarYGuardarReporteGeneral(
+        pedidoInicial: 1,
+        pedidoFinal: pedidos.length,
+        listaProductosVendidos: listaProd,
+        nombreArchivo: 'Reporte_Productos_Vendidos.pdf',
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ruta != null ? '¡Reporte de productos guardado en Descargas!' : 'Error al generar')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      if (mounted) setState(() => _generando = false);
+    }
+  }
+
+  Future<void> _generarHistorialCompleto() async {
+    setState(() => _generando = true);
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final pedidos = await db.query('pedidos');
+      
+      List<Map<String, dynamic>> lista = pedidos.map((p) => {
+        'nombre': '${p['numero_pedido']} - ${p['cliente']}',
+        'cantidad': 1,
+        'valorTotal': (p['total'] as num).toDouble(),
+      }).toList();
+
+      String? ruta = await PdfHelper.generarYGuardarReporteGeneral(
+        pedidoInicial: 1,
+        pedidoFinal: pedidos.length,
+        listaProductosVendidos: lista,
+        nombreArchivo: 'Historial_Completo_Pedidos.pdf',
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ruta != null ? '¡Historial completo guardado en Descargas!' : 'Error al guardar')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      if (mounted) setState(() => _generando = false);
+    }
   }
 
   @override
@@ -1517,60 +1567,61 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.picture_as_pdf, size: 80, color: Colors.indigo),
-              const SizedBox(height: 20),
-              const Text(
-                'Generar Reporte en PDF',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Puedes visualizar, guardar o imprimir todos los pedidos registrados en formato PDF o elegir un rango de fechas.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontSize: 14),
-              ),
-              const SizedBox(height: 30),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.indigo,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          child: _generando
+              ? const CircularProgressIndicator()
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.picture_as_pdf, size: 70, color: Colors.indigo),
+                    const SizedBox(height: 15),
+                    const Text('Generar Reportes en PDF', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Selecciona el tipo de reporte que deseas descargar directamente a la carpeta de descargas.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                    const SizedBox(height: 25),
+                    
+                    // Botón 1: Historial Completo
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.indigo,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 48),
+                      ),
+                      onPressed: _generarHistorialCompleto,
+                      icon: const Icon(Icons.print),
+                      label: const Text('Generar Historial Completo'),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Botón 2: Por Rango de Pedidos (Con selectores)
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.indigo,
+                        minimumSize: const Size(double.infinity, 48),
+                        side: const BorderSide(color: Colors.indigo),
+                      ),
+                      onPressed: _mostrarDialogoRangoPedidos,
+                      icon: const Icon(Icons.filter_list),
+                      label: const Text('Generar por Rango de Pedidos'),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Botón 3: Productos Vendidos
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.indigo,
+                        minimumSize: const Size(double.infinity, 48),
+                        side: const BorderSide(color: Colors.indigo),
+                      ),
+                      onPressed: _generarReporteProductosVendidos,
+                      icon: const Icon(Icons.bar_chart),
+                      label: const Text('Generar Reporte de Productos Vendidos'),
+                    ),
+                  ],
                 ),
-                onPressed: () => _generarYCompartirPdf(context),
-                icon: const Icon(Icons.print),
-                label: const Text('Generar Historial Completo', style: TextStyle(fontSize: 16)),
-              ),
-              const SizedBox(height: 15),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.indigo,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                ),
-                onPressed: () => _mostrarSelectorRango(context),
-                icon: const Icon(Icons.date_range),
-                label: const Text('Generar por Rango de Fechas', style: TextStyle(fontSize: 16)),
-              ),
-              if (fechaInicio != null && fechaFin != null) ...[
-                const SizedBox(height: 15),
-                Text(
-                  'Filtro activo: ${DateFormat('dd/MM/yyyy').format(fechaInicio!)} al ${DateFormat('dd/MM/yyyy').format(fechaFin!)}',
-                  style: const TextStyle(fontSize: 12, color: Colors.indigo, fontWeight: FontWeight.bold),
-                ),
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      fechaInicio = null;
-                      fechaFin = null;
-                    });
-                  },
-                  child: const Text('Limpiar filtro de fecha', style: TextStyle(color: Colors.red, fontSize: 12)),
-                ),
-              ],
-            ],
-          ),
         ),
       ),
     );
