@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:app_ventas_export_pdf/pdf_helper.dart';
 // REEMPLAZA 'tu_app' por el nombre exacto de tu proyecto que figura en tu pubspec.yaml
 import 'package:tu_app/helpers/pdf_helper.dart'; 
 
