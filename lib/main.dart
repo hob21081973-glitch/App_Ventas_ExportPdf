@@ -1315,14 +1315,14 @@ class VistaExportarPdf extends StatefulWidget {
 }
 
 class _VistaExportarPdfState extends State<VistaExportarPdf> {
-  int? _idPedidoSeleccionado;
+  int? _idPedidoInicio;
+  int? _idPedidoFin;
   DateTime? _fechaInicio;
   DateTime? _fechaFin;
 
   // Método auxiliar para guardar y descargar el PDF en el teléfono
   Future<void> _guardarYCompartirPdf(pw.Document pdf, String nombreArchivo) async {
     try {
-      // Obtenemos el directorio de descargas o documentos públicos de Android
       Directory? directorio;
       if (Platform.isAndroid) {
         directorio = Directory('/storage/emulated/0/Download');
@@ -1342,7 +1342,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         SnackBar(content: Text('¡Guardado en Descargas: $nombreArchivo')),
       );
 
-      // Opcional: Abrir o mostrar el menú para compartir/imprimir también
       await Printing.layoutPdf(onLayout: (format) async => pdf.save());
     } catch (e) {
       if (!mounted) return;
@@ -1356,13 +1355,11 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   Future<void> _generarPdfGeneral() async {
     final db = await DatabaseHelper.instance.database;
     
-    // Consulta base
     String query = 'SELECT * FROM pedidos';
     List<String> args = [];
 
     if (_fechaInicio != null && _fechaFin != null) {
       String inicioStr = DateFormat('yyyy-MM-dd').format(_fechaInicio!);
-      // Añadimos las 23:59:59 para abarcar todo el día final
       String finStr = '${DateFormat('yyyy-MM-dd').format(_fechaFin!)} 23:59';
       query += ' WHERE fecha BETWEEN ? AND ?';
       args = [inicioStr, finStr];
@@ -1472,52 +1469,65 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     await _guardarYCompartirPdf(pdf, nombre);
   }
 
-  // 3. PDF Reporte de Pedido Seleccionado
-  Future<void> _generarPdfPedidoEspecifico() async {
-    if (_idPedidoSeleccionado == null) {
+  // 3. PDF Reporte por Rango de Pedidos Seleccionados
+  Future<void> _generarPdfRangoPedidos() async {
+    if (_idPedidoInicio == null || _idPedidoFin == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, selecciona un pedido primero')),
+        const SnackBar(content: Text('Por favor, selecciona el pedido inicial y final')),
+      );
+      return;
+    }
+
+    if (_idPedidoInicio! > _idPedidoFin!) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('El pedido inicial no puede ser mayor que el final')),
       );
       return;
     }
 
     final db = await DatabaseHelper.instance.database;
-    final resultado = await db.query('pedidos', where: 'id = ?', whereArgs: [_idPedidoSeleccionado]);
+    // Buscamos todos los pedidos comprendidos entre los IDs seleccionados
+    final pedidos = await db.query(
+      'pedidos',
+      where: 'id BETWEEN ? AND ?',
+      whereArgs: [_idPedidoInicio, _idPedidoFin],
+      orderBy: 'id ASC',
+    );
     
-    if (resultado.isEmpty) return;
-    final pedido = resultado.first;
+    if (pedidos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se encontraron pedidos en ese rango')),
+      );
+      return;
+    }
 
     final pdf = pw.Document();
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
         build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('Comprobante de Pedido', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 20),
-              pw.Text('Número de Pedido: ${pedido['numero_pedido']}', style: const pw.TextStyle(fontSize: 16)),
-              pw.Text('Cliente: ${pedido['cliente']}', style: const pw.TextStyle(fontSize: 16)),
-              pw.Text('Fecha: ${pedido['fecha']}', style: const pw.TextStyle(fontSize: 16)),
-              pw.SizedBox(height: 15),
-              pw.Divider(),
-              pw.SizedBox(height: 15),
-              pw.Text('Productos:', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 10),
-              pw.Text(pedido['productos_json']?.toString() ?? '', style: const pw.TextStyle(fontSize: 14)),
-              pw.SizedBox(height: 20),
-              pw.Divider(),
-              pw.SizedBox(height: 10),
-              pw.Text('Total a Pagar: L ${(pedido['total'] as num).toStringAsFixed(2)}', 
-                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo)),
-            ],
-          );
+          return [
+            pw.Text('Reporte por Rango de Pedidos', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 15),
+            pw.Table.fromTextArray(
+              headers: ['Pedido', 'Cliente', 'Productos', 'Total', 'Fecha'],
+              data: pedidos.map((p) => [
+                p['numero_pedido']?.toString() ?? '',
+                p['cliente']?.toString() ?? '',
+                p['productos_json']?.toString() ?? '',
+                'L ${(p['total'] as num?)?.toStringAsFixed(2) ?? '0.00'}',
+                p['fecha']?.toString() ?? '',
+              ]).toList(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
+              cellStyle: const pw.TextStyle(fontSize: 10),
+            ),
+          ];
         },
       ),
     );
 
-    String nombre = 'Pedido_${pedido['numero_pedido']}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    String nombre = 'Rango_Pedidos_${DateTime.now().millisecondsSinceEpoch}.pdf';
     await _guardarYCompartirPdf(pdf, nombre);
   }
 
@@ -1533,7 +1543,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         padding: const EdgeInsets.all(16.0),
         child: ListView(
           children: [
-            // Opción 1: Reporte General con Selectores de Fecha
+            // Opción 1: Reporte General con Fechas
             Card(
               elevation: 3,
               child: Padding(
@@ -1620,7 +1630,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             ),
             const SizedBox(height: 15),
 
-            // Opción 3: Reporte de Pedido Específico
+            // Opción 3: Reporte por Rango de Pedidos
             Card(
               elevation: 3,
               child: Padding(
@@ -1628,36 +1638,52 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Reporte de Pedido Seleccionado', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const Text('Reporte por Rango de Pedidos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 5),
-                    const Text('Elige un pedido específico para generar su factura o comprobante individual.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    const Text('Selecciona el pedido inicial y final para agruparlos en un PDF.', style: TextStyle(fontSize: 12, color: Colors.grey)),
                     const SizedBox(height: 10),
                     FutureBuilder<List<Map<String, dynamic>>>(
-                      future: DatabaseHelper.instance.database.then((db) => db.query('pedidos', orderBy: 'id DESC')),
+                      future: DatabaseHelper.instance.database.then((db) => db.query('pedidos', orderBy: 'id ASC')),
                       builder: (context, snapshot) {
                         if (!snapshot.hasData) return const CircularProgressIndicator();
                         final pedidos = snapshot.data!;
                         if (pedidos.isEmpty) {
-                          return const Text('No hay pedidos disponibles para seleccionar.', style: TextStyle(color: Colors.red, fontSize: 12));
+                          return const Text('No hay pedidos disponibles.', style: TextStyle(color: Colors.red, fontSize: 12));
                         }
-                        return DropdownButtonFormField<int>(
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          ),
-                          hint: const Text('Selecciona un pedido'),
-                          value: _idPedidoSeleccionado,
-                          items: pedidos.map((p) {
-                            return DropdownMenuItem<int>(
-                              value: p['id'] as int,
-                              child: Text('${p['numero_pedido']} - ${p['cliente']} (L ${p['total']})', overflow: TextOverflow.ellipsis),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            setState(() {
-                              _idPedidoSeleccionado = val;
-                            });
-                          },
+                        return Column(
+                          children: [
+                            DropdownButtonFormField<int>(
+                              decoration: const InputDecoration(
+                                labelText: 'Pedido Inicial',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              ),
+                              value: _idPedidoInicio,
+                              items: pedidos.map((p) {
+                                return DropdownMenuItem<int>(
+                                  value: p['id'] as int,
+                                  child: Text('${p['numero_pedido']} - ${p['cliente']}', overflow: TextOverflow.ellipsis),
+                                );
+                              }).toList(),
+                              onChanged: (val) => setState(() => _idPedidoInicio = val),
+                            ),
+                            const SizedBox(height: 10),
+                            DropdownButtonFormField<int>(
+                              decoration: const InputDecoration(
+                                labelText: 'Pedido Final',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              ),
+                              value: _idPedidoFin,
+                              items: pedidos.map((p) {
+                                return DropdownMenuItem<int>(
+                                  value: p['id'] as int,
+                                  child: Text('${p['numero_pedido']} - ${p['cliente']}', overflow: TextOverflow.ellipsis),
+                                );
+                              }).toList(),
+                              onChanged: (val) => setState(() => _idPedidoFin = val),
+                            ),
+                          ],
                         );
                       },
                     ),
@@ -1666,8 +1692,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                       alignment: Alignment.centerRight,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-                        onPressed: _generarPdfPedidoEspecifico,
-                        child: const Text('Exportar Pedido Seleccionado'),
+                        onPressed: _generarPdfRangoPedidos,
+                        child: const Text('Exportar Rango de Pedidos'),
                       ),
                     ),
                   ],
