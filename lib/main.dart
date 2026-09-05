@@ -1282,30 +1282,30 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 child: ListTile(
-                  title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.indigo.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
+                title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
                     'Total: ${entry.value}',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.indigo,
-                      fontSize: 18, // <-- Agrégalo aquí (puedes probar con 18 o 20)
+                      fontSize: 18,
                     ),
                   ),
-                ),
-              ),
-            );  
-           },
-          );
-        },
-      ),
-    );
-  }
+                ), // <--- Este cierra el Container
+              ), // <--- Este cierra el ListTile
+            ); // <--- Este cierra el Card (o el elemento de la lista)
+          },
+        );
+      },
+    ),
+  );
+}
 
 // ==========================================
 // 7. PESTAÑA: EXPORTAR PDF (CON FECHAS Y DESCARGAS)
