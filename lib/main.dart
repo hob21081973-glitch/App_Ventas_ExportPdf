@@ -1303,8 +1303,11 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
 }
 
 // ==========================================
-// 7. PESTAÑA: EXPORTAR PDF (CON LAS 3 OPCIONES)
+// 7. PESTAÑA: EXPORTAR PDF (CON FECHAS Y DESCARGAS)
 // ==========================================
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+
 class VistaExportarPdf extends StatefulWidget {
   const VistaExportarPdf({super.key});
 
@@ -1314,18 +1317,78 @@ class VistaExportarPdf extends StatefulWidget {
 
 class _VistaExportarPdfState extends State<VistaExportarPdf> {
   int? _idPedidoSeleccionado;
+  DateTime? _fechaInicio;
+  DateTime? _fechaFin;
 
+  // Método auxiliar para guardar y descargar el PDF en el teléfono
+  Future<void> _guardarYCompartirPdf(pw.Document pdf, String nombreArchivo) async {
+    try {
+      // Obtenemos el directorio de descargas o documentos públicos de Android
+      Directory? directorio;
+      if (Platform.isAndroid) {
+        directorio = Directory('/storage/emulated/0/Download');
+        if (!await directorio.exists()) {
+          directorio = await getExternalStorageDirectory();
+        }
+      } else {
+        directorio = await getApplicationDocumentsDirectory();
+      }
+
+      final ruta = '${directorio!.path}/$nombreArchivo';
+      final archivo = File(ruta);
+      await archivo.writeAsBytes(await pdf.save());
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('¡Guardado en Descargas: $nombreArchivo')),
+      );
+
+      // Opcional: Abrir o mostrar el menú para compartir/imprimir también
+      await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al guardar el archivo: $e')),
+      );
+    }
+  }
+
+  // 1. PDF Reporte General (Filtrado por Rango de Fechas)
   Future<void> _generarPdfGeneral() async {
-    final pdf = pw.Document();
     final db = await DatabaseHelper.instance.database;
-    final pedidos = await db.query('pedidos', orderBy: 'id DESC');
+    
+    // Consulta base
+    String query = 'SELECT * FROM pedidos';
+    List<String> args = [];
 
+    if (_fechaInicio != null && _fechaFin != null) {
+      String inicioStr = DateFormat('yyyy-MM-dd').format(_fechaInicio!);
+      // Añadimos las 23:59:59 para abarcar todo el día final
+      String finStr = '${DateFormat('yyyy-MM-dd').format(_fechaFin!)} 23:59';
+      query += ' WHERE fecha BETWEEN ? AND ?';
+      args = [inicioStr, finStr];
+    }
+
+    query += ' ORDER BY id DESC';
+    final pedidos = await db.rawQuery(query, args);
+
+    if (pedidos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay pedidos en el rango de fechas seleccionado')),
+      );
+      return;
+    }
+
+    final pdf = pw.Document();
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
         build: (pw.Context context) {
           return [
             pw.Text('Reporte General de Ventas', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
+            if (_fechaInicio != null && _fechaFin != null)
+              pw.Text('Del: ${DateFormat('dd/MM/yyyy').format(_fechaInicio!)} al ${DateFormat('dd/MM/yyyy').format(_fechaFin!)}', 
+                style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
             pw.SizedBox(height: 15),
             pw.Table.fromTextArray(
               headers: ['Pedido', 'Cliente', 'Productos', 'Total', 'Fecha'],
@@ -1345,9 +1408,11 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+    String nombre = 'Reporte_General_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    await _guardarYCompartirPdf(pdf, nombre);
   }
 
+  // 2. PDF Reporte por Productos Vendidos
   Future<void> _generarPdfProductosVendidos() async {
     final pdf = pw.Document();
     final db = await DatabaseHelper.instance.database;
@@ -1404,9 +1469,11 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+    String nombre = 'Reporte_Productos_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    await _guardarYCompartirPdf(pdf, nombre);
   }
 
+  // 3. PDF Reporte de Pedido Seleccionado
   Future<void> _generarPdfPedidoEspecifico() async {
     if (_idPedidoSeleccionado == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1451,7 +1518,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+    String nombre = 'Pedido_${pedido['numero_pedido']}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    await _guardarYCompartirPdf(pdf, nombre);
   }
 
   @override
@@ -1466,20 +1534,78 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         padding: const EdgeInsets.all(16.0),
         child: ListView(
           children: [
+            // Opción 1: Reporte General con Selectores de Fecha
             Card(
               elevation: 3,
-              child: ListTile(
-                leading: const Icon(Icons.picture_as_pdf, color: Colors.indigo, size: 36),
-                title: const Text('Reporte General de Ventas', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Exporta la lista completa de todos los pedidos registrados.'),
-                trailing: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-                  onPressed: _generarPdfGeneral,
-                  child: const Text('Exportar'),
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Reporte General de Ventas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 5),
+                    const Text('Filtra por fechas o déjalas vacías para exportar todo.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton.icon(
+                            icon: const Icon(Icons.calendar_today, size: 16),
+                            label: Text(_fechaInicio == null ? 'Fecha Inicio' : DateFormat('dd/MM/yyyy').format(_fechaInicio!)),
+                            onPressed: () async {
+                              DateTime? picked = await showDatePicker(
+                                context: context,
+                                initialDate: DateTime.now(),
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2030),
+                              );
+                              if (picked != null) setState(() => _fechaInicio = picked);
+                            },
+                          ),
+                        ),
+                        Expanded(
+                          child: TextButton.icon(
+                            icon: const Icon(Icons.calendar_today, size: 16),
+                            label: Text(_fechaFin == null ? 'Fecha Fin' : DateFormat('dd/MM/yyyy').format(_fechaFin!)),
+                            onPressed: () async {
+                              DateTime? picked = await showDatePicker(
+                                context: context,
+                                initialDate: DateTime.now(),
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2030),
+                              );
+                              if (picked != null) setState(() => _fechaFin = picked);
+                            },
+                          ),
+                        ),
+                        if (_fechaInicio != null || _fechaFin != null)
+                          IconButton(
+                            icon: const Icon(Icons.clear, color: Colors.red, size: 18),
+                            tooltip: 'Limpiar fechas',
+                            onPressed: () => setState(() {
+                              _fechaInicio = null;
+                              _fechaFin = null;
+                            }),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                        onPressed: _generarPdfGeneral,
+                        icon: const Icon(Icons.picture_as_pdf),
+                        label: const Text('Exportar General'),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
             const SizedBox(height: 15),
+
+            // Opción 2: Reporte por Productos Vendidos
             Card(
               elevation: 3,
               child: ListTile(
@@ -1494,6 +1620,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               ),
             ),
             const SizedBox(height: 15),
+
+            // Opción 3: Reporte de Pedido Específico
             Card(
               elevation: 3,
               child: Padding(
