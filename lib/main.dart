@@ -131,43 +131,6 @@ class DatabaseHelper {
 }
 
 // ==========================================
-// PDF HELPER (UTILIDAD PARA GENERAR REPORTES)
-// ==========================================
-class PdfHelper {
-  static Future<pw.Document> generarReporteGeneral() async {
-    final pdf = pw.Document();
-    final db = await DatabaseHelper.instance.database;
-    final pedidos = await db.query('pedidos', orderBy: 'id DESC');
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.letter,
-        build: (pw.Context context) {
-          return [
-            pw.Text('Reporte General de Ventas', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
-            pw.SizedBox(height: 15),
-            pw.Table.fromTextArray(
-              headers: ['Pedido', 'Cliente', 'Productos', 'Total', 'Fecha'],
-              data: pedidos.map((p) => [
-                p['numero_pedido']?.toString() ?? '',
-                p['cliente']?.toString() ?? '',
-                p['productos_json']?.toString() ?? '',
-                'L ${(p['total'] as num?)?.toStringAsFixed(2) ?? '0.00'}',
-                p['fecha']?.toString() ?? '',
-              ]).toList(),
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
-              cellStyle: const pw.TextStyle(fontSize: 10),
-            ),
-          ];
-        },
-      ),
-    );
-    return pdf;
-  }
-}
-
-// ==========================================
 // MENÚ PRINCIPAL CON PESTAÑAS
 // ==========================================
 class MenuPrincipal extends StatefulWidget {
@@ -823,74 +786,73 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
 // ==========================================
 class VistaHistorialPedidos extends StatefulWidget {
   const VistaHistorialPedidos({super.key});
+
   @override
   State<VistaHistorialPedidos> createState() => _VistaHistorialPedidosState();
 }
 
 class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
-  String filtroHistorial = '';
+  String _filtro = '';
 
   @override
   void initState() {
     super.initState();
-    changeNotifierPedidos.addListener(_actualizarLista);
+    changeNotifierPedidos.addListener(_recargar);
   }
 
   @override
   void dispose() {
-    changeNotifierPedidos.removeListener(_actualizarLista);
+    changeNotifierPedidos.removeListener(_recargar);
     super.dispose();
   }
 
-  void _actualizarLista() {
+  void _recargar() {
     if (mounted) setState(() {});
   }
 
-  Future<List<Map<String, dynamic>>> _cargarPedidos() async {
+  Future<List<Map<String, dynamic>>> _obtenerPedidos() async {
     final db = await DatabaseHelper.instance.database;
-    if (filtroHistorial.isEmpty) {
+    if (_filtro.isEmpty) {
       return await db.query('pedidos', orderBy: 'id DESC');
     } else {
       return await db.query(
         'pedidos',
         where: 'cliente LIKE ? OR numero_pedido LIKE ?',
-        whereArgs: ['%$filtroHistorial%', '%$filtroHistorial%'],
+        whereArgs: ['%$_filtro%', '%$_filtro%'],
         orderBy: 'id DESC',
       );
     }
   }
 
-  // NUEVO: Función para resetear todo el historial de pedidos
-  void _resetearHistorial() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Resetear Historial'),
-        content: const Text('¿Estás seguro de borrar todos los pedidos registrados? El conteo volverá a iniciar desde el Pedido #01.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(context);
-              final db = await DatabaseHelper.instance.database;
-              await db.delete('pedidos'); // Borra todos los registros de la tabla pedidos
-              setState(() {});
-              changeNotifierPedidos.value++;
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Historial reseteado. Nuevo conteo iniciado en Pedido #01.')),
-              );
-            },
-            child: const Text('Sí, resetear'),
-          ),
-        ],
-      ),
+  void _eliminarPedido(int id) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.delete('pedidos', where: 'id = ?', whereArgs: [id]);
+    changeNotifierPedidos.value++;
+    setState(() {});
+  }
+
+  void _editarPedido(Map<String, dynamic> pedido) {
+    final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
+    if (mainState == null) return;
+
+    List<Map<String, dynamic>> productosEdit = [];
+    String prodStr = pedido['productos_json']?.toString() ?? '';
+    
+    productosEdit.add({
+      'nombre': prodStr,
+      'precio': pedido['total'],
+      'cantidad': 1,
+      'comentario': ''
+    });
+
+    mainState.cargarPedidoParaEditar(
+      pedido['id'],
+      pedido['numero_pedido'],
+      pedido['cliente'],
+      productosEdit,
     );
   }
 
-  // ... (mantén el resto de métodos como _eliminarPedido y _editarPedido iguales)
-  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -898,14 +860,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         title: const Text('Historial de Pedidos'),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
-        actions: [
-          // Botón para resetear el historial completo
-          IconButton(
-            icon: const Icon(Icons.delete_sweep, color: Colors.amberAccent),
-            tooltip: 'Resetear Historial',
-            onPressed: _resetearHistorial,
-          ),
-        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -919,23 +873,19 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
               ),
               onChanged: (val) {
                 setState(() {
-                  filtroHistorial = val.trim();
+                  _filtro = val.trim();
                 });
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Expanded(
               child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: _cargarPedidos(),
+                future: _obtenerPedidos(),
                 builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                   final pedidos = snapshot.data!;
                   if (pedidos.isEmpty) {
-                    return const Center(
-                      child: Text('No hay pedidos registrados', style: TextStyle(color: Colors.grey)),
-                    );
+                    return const Center(child: Text('No hay pedidos registrados', style: TextStyle(color: Colors.grey)));
                   }
                   return ListView.builder(
                     itemCount: pedidos.length,
@@ -943,73 +893,20 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                       final p = pedidos[index];
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 6),
-                        child: Padding(
-                          padding: const EdgeInsets.all(10.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        child: ListTile(
+                          title: Text('${p['numero_pedido']} - ${p['cliente']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+                          subtitle: Text('Productos: ${p['productos_json']}\nFecha: ${p['fecha']}\nTotal: L ${(p['total'] as num).toStringAsFixed(2)}', style: const TextStyle(fontSize: 13)),
+                          isThreeLine: true,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    p['numero_pedido'],
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo, fontSize: 15),
-                                  ),
-                                  Text(
-                                    p['fecha'] ?? '',
-                                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                  ),
-                                ],
+                              IconButton(
+                                icon: const Icon(Icons.edit, color: Colors.blue),
+                                onPressed: () => _editarPedido(p),
                               ),
-                              const SizedBox(height: 4),
-                              Text('Cliente: ${p['cliente']}', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
-                              const SizedBox(height: 4),
-                              Text('Productos: ${p['productos_json']}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                              const Divider(height: 12),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Total: L ${(p['total'] as num).toStringAsFixed(2)}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.indigo),
-                                  ),
-                                  Row(
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-                                        tooltip: 'Editar Pedido',
-                                        onPressed: () => _editarPedido(p),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                        tooltip: 'Eliminar Pedido',
-                                        onPressed: () {
-                                          showDialog(
-                                            context: context,
-                                            builder: (context) => AlertDialog(
-                                              title: const Text('Eliminar Pedido'),
-                                              content: Text('¿Desea eliminar el ${p['numero_pedido']}?'),
-                                              actions: [
-                                                TextButton(
-                                                  onPressed: () => Navigator.pop(context),
-                                                  child: const Text('Cancelar'),
-                                                ),
-                                                ElevatedButton(
-                                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                                                  onPressed: () {
-                                                    Navigator.pop(context);
-                                                    _eliminarPedido(p['id']);
-                                                  },
-                                                  child: const Text('Eliminar'),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => _eliminarPedido(p['id']),
                               ),
                             ],
                           ),
@@ -1405,5 +1302,254 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
   }
 }
 
-flutter pub get
-flutter build apk --release
+// ==========================================
+// 7. PESTAÑA: EXPORTAR PDF (CON LAS 3 OPCIONES)
+// ==========================================
+class VistaExportarPdf extends StatefulWidget {
+  const VistaExportarPdf({super.key});
+
+  @override
+  State<VistaExportarPdf> createState() => _VistaExportarPdfState();
+}
+
+class _VistaExportarPdfState extends State<VistaExportarPdf> {
+  int? _idPedidoSeleccionado;
+
+  Future<void> _generarPdfGeneral() async {
+    final pdf = pw.Document();
+    final db = await DatabaseHelper.instance.database;
+    final pedidos = await db.query('pedidos', orderBy: 'id DESC');
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.letter,
+        build: (pw.Context context) {
+          return [
+            pw.Text('Reporte General de Ventas', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 15),
+            pw.Table.fromTextArray(
+              headers: ['Pedido', 'Cliente', 'Productos', 'Total', 'Fecha'],
+              data: pedidos.map((p) => [
+                p['numero_pedido']?.toString() ?? '',
+                p['cliente']?.toString() ?? '',
+                p['productos_json']?.toString() ?? '',
+                'L ${(p['total'] as num?)?.toStringAsFixed(2) ?? '0.00'}',
+                p['fecha']?.toString() ?? '',
+              ]).toList(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
+              cellStyle: const pw.TextStyle(fontSize: 10),
+            ),
+          ];
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+  }
+
+  Future<void> _generarPdfProductosVendidos() async {
+    final pdf = pw.Document();
+    final db = await DatabaseHelper.instance.database;
+    final pedidos = await db.query('pedidos');
+    Map<String, int> conteoProductos = {};
+
+    for (var pedido in pedidos) {
+      String productosJson = pedido['productos_json']?.toString() ?? '';
+      List<String> items = productosJson.split(';');
+      for (var item in items) {
+        item = item.trim();
+        if (item.isEmpty) continue;
+
+        RegExp regExp = RegExp(r'\(x(\d+)\)$');
+        Match? match = regExp.firstMatch(item);
+        int cantidad = 1;
+        String nombreProd = item;
+
+        if (match != null) {
+          cantidad = int.tryParse(match.group(1) ?? '1') ?? 1;
+          nombreProd = item.replaceAll(regExp, '').trim();
+          
+          int bracketIdx = nombreProd.indexOf(' [');
+          if (bracketIdx != -1) {
+            nombreProd = nombreProd.substring(0, bracketIdx).trim();
+          }
+        }
+
+        conteoProductos[nombreProd] = (conteoProductos[nombreProd] ?? 0) + cantidad;
+      }
+    }
+
+    final listaOrdenada = conteoProductos.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.letter,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('Reporte de Productos Vendidos', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 15),
+              pw.Table.fromTextArray(
+                headers: ['Producto', 'Cantidad Total Vendida'],
+                data: listaOrdenada.map((e) => [e.key, e.value.toString()]).toList(),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+  }
+
+  Future<void> _generarPdfPedidoEspecifico() async {
+    if (_idPedidoSeleccionado == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, selecciona un pedido primero')),
+      );
+      return;
+    }
+
+    final db = await DatabaseHelper.instance.database;
+    final resultado = await db.query('pedidos', where: 'id = ?', whereArgs: [_idPedidoSeleccionado]);
+    
+    if (resultado.isEmpty) return;
+    final pedido = resultado.first;
+
+    final pdf = pw.Document();
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.letter,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('Comprobante de Pedido', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 20),
+              pw.Text('Número de Pedido: ${pedido['numero_pedido']}', style: const pw.TextStyle(fontSize: 16)),
+              pw.Text('Cliente: ${pedido['cliente']}', style: const pw.TextStyle(fontSize: 16)),
+              pw.Text('Fecha: ${pedido['fecha']}', style: const pw.TextStyle(fontSize: 16)),
+              pw.SizedBox(height: 15),
+              pw.Divider(),
+              pw.SizedBox(height: 15),
+              pw.Text('Productos:', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 10),
+              pw.Text(pedido['productos_json']?.toString() ?? '', style: const pw.TextStyle(fontSize: 14)),
+              pw.SizedBox(height: 20),
+              pw.Divider(),
+              pw.SizedBox(height: 10),
+              pw.Text('Total a Pagar: L ${(pedido['total'] as num).toStringAsFixed(2)}', 
+                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo)),
+            ],
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Exportar PDF'),
+        backgroundColor: Colors.indigo,
+        foregroundColor: Colors.white,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: ListView(
+          children: [
+            Card(
+              elevation: 3,
+              child: ListTile(
+                leading: const Icon(Icons.picture_as_pdf, color: Colors.indigo, size: 36),
+                title: const Text('Reporte General de Ventas', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Exporta la lista completa de todos los pedidos registrados.'),
+                trailing: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                  onPressed: _generarPdfGeneral,
+                  child: const Text('Exportar'),
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            Card(
+              elevation: 3,
+              child: ListTile(
+                leading: const Icon(Icons.bar_chart, color: Colors.indigo, size: 36),
+                title: const Text('Reporte por Productos Vendidos', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Exporta el total acumulado de unidades vendidas por cada producto.'),
+                trailing: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                  onPressed: _generarPdfProductosVendidos,
+                  child: const Text('Exportar'),
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            Card(
+              elevation: 3,
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Reporte de Pedido Seleccionado', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 5),
+                    const Text('Elige un pedido específico para generar su factura o comprobante individual.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    const SizedBox(height: 10),
+                    FutureBuilder<List<Map<String, dynamic>>>(
+                      future: DatabaseHelper.instance.database.then((db) => db.query('pedidos', orderBy: 'id DESC')),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return const CircularProgressIndicator();
+                        final pedidos = snapshot.data!;
+                        if (pedidos.isEmpty) {
+                          return const Text('No hay pedidos disponibles para seleccionar.', style: TextStyle(color: Colors.red, fontSize: 12));
+                        }
+                        return DropdownButtonFormField<int>(
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          ),
+                          hint: const Text('Selecciona un pedido'),
+                          value: _idPedidoSeleccionado,
+                          items: pedidos.map((p) {
+                            return DropdownMenuItem<int>(
+                              value: p['id'] as int,
+                              child: Text('${p['numero_pedido']} - ${p['cliente']} (L ${p['total']})', overflow: TextOverflow.ellipsis),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            setState(() {
+                              _idPedidoSeleccionado = val;
+                            });
+                          },
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                        onPressed: _generarPdfPedidoEspecifico,
+                        child: const Text('Exportar Pedido Seleccionado'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
