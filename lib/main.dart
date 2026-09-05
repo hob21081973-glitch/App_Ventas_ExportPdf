@@ -1294,15 +1294,18 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.indigo,
-                      fontSize: 22,
+                      fontSize: 18,
                     ),
                   ),
                 ),
-              );
-            },
-          );
-        }
-      }
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
 
 // ==========================================
 // 7. PESTAÑA: EXPORTAR PDF (CON FECHAS Y DESCARGAS)
