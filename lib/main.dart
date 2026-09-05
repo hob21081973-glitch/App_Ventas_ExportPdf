@@ -1294,18 +1294,15 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.indigo,
-                      fontSize: 18,
-                    ),
-                  ),
-                ), // <--- Este cierra el Container
-              ), // <--- Este cierra el ListTile
-            ); // <--- Este cierra el Card (o el elemento de la lista)
-          },
-        );
-      },
-    ),
-  );
-}
+                fontSize: 18,
+              ), // Cierra el TextStyle(
+            ), // Cierra el Text(
+          ), // Cierra el Container(
+        ); // Cierra el ListTile( con su punto y coma
+      }, // Cierra la función itemBuilder del ListView
+    ); // Cierra el ListView.builder(
+  } // Cierra el método build de la clase
+} // Cierra la clase State  
 
 // ==========================================
 // 7. PESTAÑA: EXPORTAR PDF (CON FECHAS Y DESCARGAS)
