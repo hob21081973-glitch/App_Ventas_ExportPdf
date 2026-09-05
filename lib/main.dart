@@ -1207,23 +1207,7 @@ class VistaResumenProductos extends StatefulWidget {
 }
 
 class _VistaResumenProductosState extends State<VistaResumenProductos> {
-  @override
-  void initState() {
-    super.initState();
-    changeNotifierPedidos.addListener(_recargar);
-  }
-
-  @override
-  void dispose() {
-    changeNotifierPedidos.removeListener(_recargar);
-    super.dispose();
-  }
-
-  void _recargar() {
-    if (mounted) setState(() {});
-  }
-
-  Future<Map<String, int>> _calcularResumenProductos() async {
+  Future<Map<String, int>> _obtenerResumenProductos() async {
     final db = await DatabaseHelper.instance.database;
     final pedidos = await db.query('pedidos');
     Map<String, int> conteoProductos = {};
@@ -1265,20 +1249,22 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
         foregroundColor: Colors.white,
       ),
       body: FutureBuilder<Map<String, int>>(
-        future: _calcularResumenProductos(),
+        future: _obtenerResumenProductos(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final resumen = snapshot.data!;
-          if (resumen.isEmpty) {
-            return const Center(child: Text('No hay productos vendidos todavía', style: TextStyle(color: Colors.grey)));
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
           }
-          final listaOrdenada = resumen.entries.toList()
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(child: Text('No hay productos vendidos aún.'));
+          }
+
+          final resumen = snapshot.data!.entries.toList()
             ..sort((a, b) => b.value.compareTo(a.value));
 
           return ListView.builder(
-            itemCount: listaOrdenada.length,
+            itemCount: resumen.length,
             itemBuilder: (context, index) {
-              final entry = listaOrdenada[index];
+              final entry = resumen[index];
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 child: ListTile(
@@ -1290,21 +1276,23 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                    'Total: ${entry.value}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.indigo,
-                      fontSize: 18,
+                      'Total: ${entry.value}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.indigo,
+                        fontSize: 18,
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
+                  ),
+                ),
+              );
+            },
           );
-        }
-      }
-
+        },
+      ),
+    );
+  }
+}
 // ==========================================
 // 7. PESTAÑA: EXPORTAR PDF (CON FECHAS Y DESCARGAS)
 // ==========================================
