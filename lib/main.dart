@@ -1290,8 +1290,11 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      'Total: ${entry.value}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo),
+                    'Total: ${entry.value}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.indigo,
+                      fontSize: 18, // <-- Agrégalo aquí (puedes probar con 18 o 20)
                     ),
                   ),
                 ),
