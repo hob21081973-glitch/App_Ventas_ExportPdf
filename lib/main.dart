@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:http/http.dart' as http;
@@ -1305,9 +1307,6 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
 // ==========================================
 // 7. PESTAÑA: EXPORTAR PDF (CON FECHAS Y DESCARGAS)
 // ==========================================
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
-
 class VistaExportarPdf extends StatefulWidget {
   const VistaExportarPdf({super.key});
 
