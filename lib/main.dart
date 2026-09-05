@@ -1219,14 +1219,16 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
         item = item.trim();
         if (item.isEmpty) continue;
 
-        RegExp regExp = RegExp(r'\(x(\d+)\)$');
+        // Buscamos explícitamente el patrón (xN) al final de la cadena
+        RegExp regExp = RegExp(r'\s*\(x(\d+)\)$');
         Match? match = regExp.firstMatch(item);
         int cantidad = 1;
         String nombreProd = item;
 
         if (match != null) {
           cantidad = int.tryParse(match.group(1) ?? '1') ?? 1;
-          nombreProd = item.replaceAll(regExp, '').trim();
+          // Removemos únicamente la coincidencia del final para dejar limpio el nombre
+          nombreProd = item.replaceFirst(regExp, '').trim();
           
           int bracketIdx = nombreProd.indexOf(' [');
           if (bracketIdx != -1) {
@@ -1239,7 +1241,6 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
     }
     return conteoProductos;
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
