@@ -1298,14 +1298,14 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
                     ),
                   ),
                 ),
-              );
-            },
+              ),
+            );  
+           },
           );
         },
       ),
     );
   }
-}
 
 // ==========================================
 // 7. PESTAÑA: EXPORTAR PDF (CON FECHAS Y DESCARGAS)
