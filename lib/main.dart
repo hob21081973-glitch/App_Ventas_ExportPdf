@@ -1002,7 +1002,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                         ),
                       ),
                       pw.SizedBox(height: 5),
-                      pw.Text('Fotografía de marco adicional', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      pw.Text('Productos Industrias Chamer y Mas', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
                     ],
                   ),
                   pw.Column(
@@ -1024,9 +1024,9 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
               pw.SizedBox(height: 2),
               pw.Text(clienteNombre, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               if (codigoCliente.isNotEmpty)
-                pw.Text('Código: $codigoCliente', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                pw.Text('Código: $codigoCliente', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
               if (telefonoCliente.isNotEmpty)
-                pw.Text('Teléfono: $telefonoCliente', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                pw.Text('Teléfono: $telefonoCliente', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
               
               pw.SizedBox(height: 20),
 
@@ -1069,9 +1069,9 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text('CONTEO DE PRODUCTOS', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: PdfColors.indigo900)),
+                        pw.Text('TOTAL PRODUCTOS', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: PdfColors.indigo900)),
                         pw.SizedBox(height: 5),
-                        pw.Text('Total de ítems: $conteoTotalUnidades', style: const pw.TextStyle(fontSize: 10)),
+                        pw.Text('Total de ítems: $conteoTotalUnidades', style: const pw.TextStyle(fontSize: 12)),
                       ],
                     ),
                   ),
@@ -1084,23 +1084,23 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
-                            pw.Text('Subtotal', style: const pw.TextStyle(fontSize: 10)),
-                            pw.Text('L ${totalPedido.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 10)),
+                            pw.Text('Subtotal', style: const pw.TextStyle(fontSize: 12)),
+                            pw.Text('L ${totalPedido.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 12)),
                           ],
                         ),
                         pw.SizedBox(height: 5),
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
-                            pw.Text('Impuesto sobre las ventas', style: const pw.TextStyle(fontSize: 10)),
-                            pw.Text('L 0.00', style: const pw.TextStyle(fontSize: 10)),
+                            pw.Text('ISV', style: const pw.TextStyle(fontSize: 12)),
+                            pw.Text('L 0.00', style: const pw.TextStyle(fontSize: 12)),
                           ],
                         ),
                         pw.Divider(color: PdfColors.grey400),
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
-                            pw.Text('GRAN Total', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                            pw.Text('GRAN TOTAL', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
                             pw.Text('L ${totalPedido.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: PdfColors.indigo900)),
                           ],
                         ),
@@ -1498,13 +1498,27 @@ class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
 // ==========================================
 class VistaResumenProductos extends StatefulWidget {
   const VistaResumenProductos({super.key});
-
   @override
   State<VistaResumenProductos> createState() => _VistaResumenProductosState();
 }
-
 class _VistaResumenProductosState extends State<VistaResumenProductos> {
-  Future<Map<String, int>> _obtenerResumenProductos() async {
+  @override
+  void initState() {
+    super.initState();
+    changeNotifierPedidos.addListener(_recargar);
+  }
+
+  @override
+  void dispose() {
+    changeNotifierPedidos.removeListener(_recargar);
+    super.dispose();
+  }
+
+  void _recargar() {
+    if (mounted) setState(() {});
+  } 
+
+ Future<Map<String, int>> _obtenerResumenProductos() async {
     final db = await DatabaseHelper.instance.database;
     final pedidos = await db.query('pedidos');
     Map<String, int> conteoProductos = {};
@@ -1532,7 +1546,6 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
     }
     return conteoProductos;
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
