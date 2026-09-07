@@ -865,7 +865,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         comentario = nombreProd.substring(bracketStart + 1, bracketEnd).trim();
         nombreProd = nombreProd.substring(0, bracketStart).trim();
       }
-      
+       
       cantidadTotalItems += cantidad;
       itemsTemporales.add({
         'nombre': nombreProd,
@@ -907,6 +907,156 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     );
   }
 
+  Future<void> _exportarPdfPedidoIndividual(Map<String, dynamic> pedido) async {
+    // Función auxiliar para exportar el PDF individual (mantenida por compatibilidad con el botón de la tarjeta)
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Barra de búsqueda
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: TextField(
+            decoration: const InputDecoration(
+              labelText: 'Buscar por cliente o número de pedido',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (value) {
+              setState(() {
+                _filtro = value;
+              });
+            },
+          ),
+        ),
+        Expanded(
+          child: FutureBuilder<List<Map<String, dynamic>>>(
+            future: _obtenerPedidos(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                return const Center(child: Text('No hay pedidos registrados'));
+              }
+
+              final pedidos = snapshot.data!;
+
+              return ListView.builder(
+                itemCount: pedidos.length,
+                itemBuilder: (context, index) {
+                  final pedido = pedidos[index];
+                  
+                  // Parsear productos_json de forma segura para mostrarlos como lista hacia abajo
+                  List<dynamic> productosLista = [];
+                  try {
+                    String prodStr = pedido['productos_json']?.toString() ?? '';
+                    if (prodStr.isNotEmpty) {
+                      productosLista = prodStr.split(';').map((item) => item.trim()).where((item) => item.isNotEmpty).toList();
+                    }
+                  } catch (_) {}
+
+                  return Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Título principal con diseño exacto de la referencia visual
+                              Expanded(
+                                child: Text(
+                                  "Pedido #${pedido['numero_pedido'] ?? pedido['id']} - ${pedido['cliente']}".toUpperCase(),
+                                  style: const TextStyle(
+                                    color: Color(0xFF1E3A8A), // Azul corporativo oscuro
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              // Botones de acción (PDF, Editar, Eliminar)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.picture_as_pdf, color: Colors.blue),
+                                    onPressed: () => _exportarPdfPedidoIndividual(pedido),
+                                    tooltip: 'Exportar PDF',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, color: Colors.blueAccent),
+                                    onPressed: () => _editarPedido(pedido),
+                                    tooltip: 'Editar',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                    onPressed: () => _eliminarPedido(pedido['id']),
+                                    tooltip: 'Eliminar',
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          // Productos desplegados en lista hacia abajo
+                          const Text(
+                            "Productos:",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          ...productosLista.map((prod) => Padding(
+                            padding: const EdgeInsets.only(bottom: 2.0),
+                            child: Text(
+                              "• $prod",
+                              style: TextStyle(
+                                color: Colors.grey[800],
+                                fontSize: 13,
+                              ),
+                            ),
+                          )),
+                          const SizedBox(height: 12),
+                          // Fecha del pedido
+                          Text(
+                            "Fecha: ${pedido['fecha']}",
+                            style: TextStyle(
+                              color: Colors.grey[700],
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          // Total del pedido
+                          Text(
+                            "Total: L ${(pedido['total'] as num?)?.toStringAsFixed(2) ?? '0.00'}",
+                            style: const TextStyle(
+                              color: Colors.black87,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
   // ==========================================
   // FUNCIÓN PARA GENERAR EL PDF CON EL NUEVO DISEÑO (ESTILO DISCOSMO)
   // ==========================================
@@ -1603,7 +1753,7 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
 // ==========================================
 class VistaExportarPdf extends StatefulWidget {
   const VistaExportarPdf({super.key});
-
+  
   @override
   State<VistaExportarPdf> createState() => _VistaExportarPdfState();
 }
@@ -1613,7 +1763,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   int? _idPedidoFin;
   DateTime? _fechaInicio;
   DateTime? _fechaFin;
-
+  
   Future<void> _guardarYCompartirPdf(pw.Document pdf, String nombreArchivo) async {
     try {
       Directory? directorio;
@@ -1640,7 +1790,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       );
     }
   }
-
+  
   Future<void> _generarPdfGeneral() async {
     final db = await DatabaseHelper.instance.database;
     String query = 'SELECT * FROM pedidos';
@@ -1659,38 +1809,113 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       );
       return;
     }
+    
     final pdf = pw.Document();
+    
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.all(32),
         build: (pw.Context context) {
           return [
-            pw.Text('Reporte General de Ventas', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
-            if (_fechaInicio != null && _fechaFin != null)
-              pw.Text('Del: ${DateFormat('dd/MM/yyyy').format(_fechaInicio!)} al ${DateFormat('dd/MM/yyyy').format(_fechaFin!)}', 
-                style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+            // Encabezado institucional ajustado al formato solicitado
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      "D I C O S M O",
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue900,
+                      ),
+                    ),
+                    pw.Text(
+                      "DISTRIBUIDOR DE PRODUCTOS CHAMER Y MAS",
+                      style: const pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      "Reporte General De Ventas",
+                      style: pw.TextStyle(
+                        fontSize: 14,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    if (_fechaInicio != null && _fechaFin != null)
+                      pw.Text(
+                        'Del: ${DateFormat('dd/MM/yyyy').format(_fechaInicio!)} al ${DateFormat('dd/MM/yyyy').format(_fechaFin!)}',
+                        style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                      ),
+                    pw.Text(
+                      "Fecha: ${DateFormat('dd/MM/yyyy').format(DateTime.now())}",
+                      style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+                    ),
+                  ],
+                ),
+              ],
+            ),
             pw.SizedBox(height: 15),
+            pw.Divider(thickness: 1, color: PdfColors.blue900),
+            pw.SizedBox(height: 10),
+
+            // Tabla del Reporte General con productos en lista hacia abajo
             pw.Table.fromTextArray(
-              headers: ['Pedido', 'Cliente', 'Productos', 'Total', 'Fecha'],
-              data: pedidos.map((p) => [
-                p['numero_pedido']?.toString() ?? '',
-                p['cliente']?.toString() ?? '',
-                p['productos_json']?.toString() ?? '',
-                'L ${(p['total'] as num?)?.toStringAsFixed(2) ?? '0.00'}',
-                p['fecha']?.toString() ?? '',
-              ]).toList(),
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
-              cellStyle: const pw.TextStyle(fontSize: 10),
+              headers: ['Pedido No.', 'Nombre Cliente', 'Productos', 'Valor Total', 'Fecha'],
+              data: pedidos.map((p) {
+                // Parsear productos_json para desplegarlos verticalmente hacia abajo con cantidad
+                String productosTexto = '';
+                try {
+                  String prodStr = p['productos_json']?.toString() ?? '';
+                  if (prodStr.isNotEmpty) {
+                    productosTexto = prodStr.split(';')
+                        .map((item) => item.trim())
+                        .where((item) => item.isNotEmpty)
+                        .map((item) => "• $item")
+                        .join('\n');
+                  }
+                } catch (_) {
+                  productosTexto = p['productos_json']?.toString() ?? '';
+                }
+
+                return [
+                  "Pedido #${p['numero_pedido'] ?? p['id']}",
+                  p['cliente']?.toString() ?? '',
+                  productosTexto,
+                  "L. ${(p['total'] as num?)?.toStringAsFixed(2) ?? '0.00'}",
+                  p['fecha']?.toString() ?? '',
+                ];
+              }).toList(),
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white,
+                fontSize: 10,
+              ),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.blue900,
+              ),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              cellPadding: const pw.EdgeInsets.all(6),
             ),
           ];
         },
       ),
     );
+    
     String nombre = 'Reporte_General_${DateTime.now().millisecondsSinceEpoch}.pdf';
     await _guardarYCompartirPdf(pdf, nombre);
   }
-
+  
   Future<void> _generarPdfProductosVendidos() async {
     final pdf = pw.Document();
     final db = await DatabaseHelper.instance.database;
@@ -1720,6 +1945,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     }
     final listaOrdenada = conteoProductos.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+    
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.letter,
@@ -1734,16 +1960,18 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 data: listaOrdenada.map((e) => [e.key, e.value.toString()]).toList(),
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
                 headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
+                cellStyle: const pw.TextStyle(fontSize: 10),
               ),
             ],
           );
         },
       ),
     );
+    
     String nombre = 'Reporte_Productos_${DateTime.now().millisecondsSinceEpoch}.pdf';
     await _guardarYCompartirPdf(pdf, nombre);
   }
-
+  
   Future<void> _generarPdfRangoPedidos() async {
     if (_idPedidoInicio == null || _idPedidoFin == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1770,7 +1998,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       );
       return;
     }
+    
     final pdf = pw.Document();
+    
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
@@ -1795,10 +2025,11 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         },
       ),
     );
+    
     String nombre = 'Rango_Pedidos_${DateTime.now().millisecondsSinceEpoch}.pdf';
     await _guardarYCompartirPdf(pdf, nombre);
   }
-
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
