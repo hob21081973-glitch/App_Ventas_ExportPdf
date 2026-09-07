@@ -783,7 +783,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
 }
 
 // ==========================================
-// 2. PESTAÑA: HISTORIAL DE PEDIDOS
+// VISTA: HISTORIAL DE PEDIDOS
 // ==========================================
 class VistaHistorialPedidos extends StatefulWidget {
   const VistaHistorialPedidos({super.key});
@@ -810,7 +810,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
   }
 
   Future<void> _editarPedido(Map<String, dynamic> pedido) async {
-    // Aquí puedes implementar la lógica o vista para editar el pedido si lo requieres
+    // Implementa aquí la lógica de edición si la necesitas
   }
 
   Future<void> _eliminarPedido(int id) async {
@@ -1120,7 +1120,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     );
   }
 }
-
 // ==========================================
   // FUNCIÓN PARA GENERAR EL PDF CON EL NUEVO DISEÑO (ESTILO DISCOSMO)
   // ==========================================
