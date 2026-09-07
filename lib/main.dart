@@ -1099,21 +1099,21 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
 
     try {
       Directory? directorio;
-if (Platform.isAndroid) {
-  // Obtiene la carpeta de descargas de forma segura compatible con versiones modernas de Android
-  final directories = await getExternalStorageDirectories(type: StorageDirectory.downloads);
-  if (directories != null && directories.isNotEmpty) {
-    directorio = directories.first;
-  } else {
-    directorio = await getExternalStorageDirectory();
-  }
-} else {
-  directorio = await getApplicationDocumentsDirectory();
-}      
+      if (Platform.isAndroid) {
+        final directories = await getExternalStorageDirectories(type: StorageDirectory.downloads);
+        if (directories != null && directories.isNotEmpty) {
+          directorio = directories.first;
+        } else {
+          directorio = await getExternalStorageDirectory();
+        }
+      } else {
+        directorio = await getApplicationDocumentsDirectory();
+      }
+      
       String numPedLimpio = (pedido['numero_pedido']?.toString() ?? 'pedido').replaceAll('#', '').replaceAll(' ', '_');
-      final exportarPdfPedidoIndividual y _guardarYCompartirPdfruta = '${directorio!.path}/Nota_$numPedLimpio.pdf';
+      final ruta = '${directorio!.path}/Nota_$numPedLimpio.pdf';
       final archivo = File(ruta);
-      await await Printing.layoutPdf(onLayout: (format) async => pdf.save(),);
+      await archivo.writeAsBytes(await pdf.save());
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('PDF guardado en Descargas: Nota_$numPedLimpio.pdf')),
@@ -1125,8 +1125,7 @@ if (Platform.isAndroid) {
         SnackBar(content: Text('Error al generar el PDF: $e')),
       );
     }
-  }
-
+    
   @override
   Widget build(BuildContext context) {
     return Scaffold(
