@@ -1125,7 +1125,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         SnackBar(content: Text('Error al generar el PDF: $e')),
       );
     }
-    
+  } 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
