@@ -1371,7 +1371,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       ),
     );
   }
-}
 
 // ==========================================
 // 3. PESTAÑA: GESTIÓN DE CLIENTES
