@@ -795,22 +795,6 @@ class VistaHistorialPedidos extends StatefulWidget {
 class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
   String _filtro = '';
 
-  @override
-  void initState() {
-    super.initState();
-    changeNotifierPedidos.addListener(_recargar);
-  }
-
-  @override
-  void dispose() {
-    changeNotifierPedidos.removeListener(_recargar);
-    super.dispose();
-  }
-
-  void _recargar() {
-    if (mounted) setState(() {});
-  }
-
   Future<List<Map<String, dynamic>>> _obtenerPedidos() async {
     final db = await DatabaseHelper.instance.database;
     if (_filtro.isEmpty) {
@@ -825,239 +809,319 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     }
   }
 
-  void _eliminarPedido(int id) async {
+  Future<void> _editarPedido(Map<String, dynamic> pedido) async {
+    // Aquí puedes implementar la lógica o vista para editar el pedido si lo requieres
+  }
+
+  Future<void> _eliminarPedido(int id) async {
     final db = await DatabaseHelper.instance.database;
     await db.delete('pedidos', where: 'id = ?', whereArgs: [id]);
-    changeNotifierPedidos.value++;
     setState(() {});
   }
 
-  void _editarPedido(Map<String, dynamic> pedido) async {
-    final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
-    if (mainState == null) return;
-    
-    List<Map<String, dynamic>> productosEdit = [];
+  Future<void> _exportarPdfPedidoIndividual(Map<String, dynamic> pedido) async {
+    final pdf = pw.Document();
+
+    final db = await DatabaseHelper.instance.database;
+    final clienteNombre = pedido['cliente']?.toString() ?? 'Cliente';
+    final resCliente = await db.query(
+      'clientes',
+      where: 'nombre = ?',
+      whereArgs: [clienteNombre],
+      limit: 1,
+    );
+
+    String telefonoCliente = '';
+    String codigoCliente = '';
+    if (resCliente.isNotEmpty) {
+      telefonoCliente = resCliente.first['telefono']?.toString() ?? '';
+      codigoCliente = resCliente.first['codigo']?.toString() ?? '';
+    }
+
     String prodStr = pedido['productos_json']?.toString() ?? '';
-    double totalPedido = (pedido['total'] as num?)?.toDouble() ?? 0.0;
-    
     List<String> items = prodStr.split(';');
-    int cantidadTotalItems = 0;
-    
-    List<Map<String, dynamic>> itemsTemporales = [];
+    List<List<String>> filasProductos = [];
+    int conteoTotalUnidades = 0;
+
     for (var item in items) {
       item = item.trim();
       if (item.isEmpty) continue;
-      
+
       RegExp regExp = RegExp(r'\s*\(x(\d+)\)$');
       Match? match = regExp.firstMatch(item);
       int cantidad = 1;
       String nombreProd = item;
-      
+
       if (match != null) {
         cantidad = int.tryParse(match.group(1) ?? '1') ?? 1;
         nombreProd = item.replaceFirst(regExp, '').trim();
       }
-      
-      String comentario = '';
-      int bracketStart = nombreProd.indexOf('[');
-      int bracketEnd = nombreProd.lastIndexOf(']');
-      if (bracketStart != -1 && bracketEnd != -1 && bracketEnd > bracketStart) {
-        comentario = nombreProd.substring(bracketStart + 1, bracketEnd).trim();
-        nombreProd = nombreProd.substring(0, bracketStart).trim();
-      }
-       
-      cantidadTotalItems += cantidad;
-      itemsTemporales.add({
-        'nombre': nombreProd,
-        'cantidad': cantidad,
-        'comentario': comentario,
-      });
-    }
 
-    final db = await DatabaseHelper.instance.database;
-    
-    for (var temp in itemsTemporales) {
+      conteoTotalUnidades += cantidad;
+
       double precioUnitario = 0.0;
       final resProd = await db.query(
         'productos',
         where: 'nombre = ?',
-        whereArgs: [temp['nombre']],
+        whereArgs: [nombreProd],
         limit: 1,
       );
-      
+
       if (resProd.isNotEmpty) {
         precioUnitario = (resProd.first['precio'] as num?)?.toDouble() ?? 0.0;
-      } else if (cantidadTotalItems > 0) {
-        precioUnitario = totalPedido / cantidadTotalItems;
       }
 
-      productosEdit.add({
-        'nombre': temp['nombre'],
-        'precio': precioUnitario,
-        'cantidad': temp['cantidad'],
-        'comentario': temp['comentario'],
-      });
+      double valorTotalFila = precioUnitario * cantidad;
+
+      filasProductos.add([
+        cantidad.toString(),
+        nombreProd,
+        precioUnitario.toStringAsFixed(2),
+        valorTotalFila.toStringAsFixed(2),
+      ]);
     }
 
-    mainState.cargarPedidoParaEditar(
-      pedido['id'],
-      pedido['numero_pedido'],
-      pedido['cliente'],
-      productosEdit,
-    );
-  }
+    double totalPedido = (pedido['total'] as num?)?.toDouble() ?? 0.0;
 
-  Future<void> _exportarPdfPedidoIndividual(Map<String, dynamic> pedido) async {
-    // Función auxiliar para exportar el PDF individual (mantenida por compatibilidad con el botón de la tarjeta)
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.all(32),
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'DISCOSMO',
+                        style: pw.TextStyle(
+                          fontSize: 22,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.indigo900,
+                        ),
+                      ),
+                      pw.SizedBox(height: 5),
+                      pw.Text('Productos Industrias Chamer y Mas', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('FECHA: ${pedido['fecha']?.toString().substring(0, 10) ?? ''}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                      pw.SizedBox(height: 3),
+                      pw.Text('PEDIDO #: ${pedido['numero_pedido']?.toString() ?? ''}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: PdfColors.indigo900)),
+                    ],
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 15),
+              pw.Divider(color: PdfColors.grey400),
+              pw.SizedBox(height: 10),
+
+              pw.Text('CLIENTE:', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+              pw.SizedBox(height: 2),
+              pw.Text(clienteNombre, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              if (codigoCliente.isNotEmpty)
+                pw.Text('Código: $codigoCliente', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+              if (telefonoCliente.isNotEmpty)
+                pw.Text('Teléfono: $telefonoCliente', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+              
+              pw.SizedBox(height: 20),
+
+              pw.Table.fromTextArray(
+                headers: ['Cant.', 'Descripción', 'PRECIO UNITARIO', 'VALOR TOTAL'],
+                data: filasProductos,
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
+                cellStyle: const pw.TextStyle(fontSize: 10),
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(1),
+                  1: const pw.FlexColumnWidth(5),
+                  2: const pw.FlexColumnWidth(2),
+                  3: const pw.FlexColumnWidth(2),
+                },
+                cellAlignment: pw.Alignment.centerLeft,
+                cellAlignments: {
+                  0: pw.Alignment.center,
+                  2: pw.Alignment.centerRight,
+                  3: pw.Alignment.centerRight,
+                },
+              ),
+
+              pw.SizedBox(height: 20),
+
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.grey400),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                    ),
+                    width: 180,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('TOTAL PRODUCTOS', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: PdfColors.indigo900)),
+                        pw.SizedBox(height: 5),
+                        pw.Text('Total de ítems: $conteoTotalUnidades', style: const pw.TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  ),
+
+                  pw.SizedBox(
+                    width: 220,
+                    child: pw.Column(
+                      children: [
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Text('Subtotal', style: const pw.TextStyle(fontSize: 12)),
+                            pw.Text('L ${totalPedido.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                        pw.SizedBox(height: 5),
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Text('ISV', style: const pw.TextStyle(fontSize: 12)),
+                            pw.Text('L 0.00', style: const pw.TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                        pw.Divider(color: PdfColors.grey400),
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Text('GRAN TOTAL', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
+                            pw.Text('L ${totalPedido.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: PdfColors.indigo900)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    try {
+      Directory? directorio;
+      if (Platform.isAndroid) {
+        directorio = Directory('/storage/emulated/0/Download');
+        if (!await directorio.exists()) {
+          directorio = await getExternalStorageDirectory();
+        }
+      } else {
+        directorio = await getApplicationDocumentsDirectory();
+      }
+      
+      String numPedLimpio = (pedido['numero_pedido']?.toString() ?? 'pedido').replaceAll('#', '').replaceAll(' ', '_');
+      final ruta = '${directorio!.path}/Nota_$numPedLimpio.pdf';
+      final archivo = File(ruta);
+      await archivo.writeAsBytes(await pdf.save());
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF guardado en Descargas: Nota_$numPedLimpio.pdf')),
+      );
+
+      await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al generar el PDF: $e')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Barra de búsqueda
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: TextField(
-            decoration: const InputDecoration(
-              labelText: 'Buscar por cliente o número de pedido',
-              prefixIcon: Icon(Icons.search),
-              border: OutlineInputBorder(),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Historial de Pedidos'),
+        backgroundColor: Colors.indigo,
+        foregroundColor: Colors.white,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          children: [
+            TextField(
+              decoration: const InputDecoration(
+                labelText: 'Buscar por cliente o número de pedido...',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (val) {
+                setState(() {
+                  _filtro = val.trim();
+                });
+              },
             ),
-            onChanged: (value) {
-              setState(() {
-                _filtro = value;
-              });
-            },
-          ),
-        ),
-        Expanded(
-          child: FutureBuilder<List<Map<String, dynamic>>>(
-            future: _obtenerPedidos(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return const Center(child: Text('No hay pedidos registrados'));
-              }
-
-              final pedidos = snapshot.data!;
-
-              return ListView.builder(
-                itemCount: pedidos.length,
-                itemBuilder: (context, index) {
-                  final pedido = pedidos[index];
-                  
-                  // Parsear productos_json de forma segura para mostrarlos como lista hacia abajo
-                  List<dynamic> productosLista = [];
-                  try {
-                    String prodStr = pedido['productos_json']?.toString() ?? '';
-                    if (prodStr.isNotEmpty) {
-                      productosLista = prodStr.split(';').map((item) => item.trim()).where((item) => item.isNotEmpty).toList();
-                    }
-                  } catch (_) {}
-
-                  return Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 10),
+            Expanded(
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: _obtenerPedidos(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                  final pedidos = snapshot.data!;
+                  if (pedidos.isEmpty) {
+                    return const Center(child: Text('No hay pedidos registrados', style: TextStyle(color: Colors.grey)));
+                  }
+                  return ListView.builder(
+                    itemCount: pedidos.length,
+                    itemBuilder: (context, index) {
+                      final p = pedidos[index];
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        child: ListTile(
+                          title: Text('${p['numero_pedido']} - ${p['cliente']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+                          subtitle: Text('Productos: ${p['productos_json']}\nFecha: ${p['fecha']}\nTotal: L ${(p['total'] as num).toStringAsFixed(2)}', style: const TextStyle(fontSize: 13)),
+                          isThreeLine: true,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              // Título principal con diseño exacto de la referencia visual
-                              Expanded(
-                                child: Text(
-                                  "Pedido #${pedido['numero_pedido'] ?? pedido['id']} - ${pedido['cliente']}".toUpperCase(),
-                                  style: const TextStyle(
-                                    color: Color(0xFF1E3A8A), // Azul corporativo oscuro
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                              IconButton(
+                                icon: const Icon(Icons.picture_as_pdf, color: Colors.indigo),
+                                tooltip: 'Generar PDF del Pedido',
+                                onPressed: () => _exportarPdfPedidoIndividual(p),
                               ),
-                              // Botones de acción (PDF, Editar, Eliminar)
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.picture_as_pdf, color: Colors.blue),
-                                    onPressed: () => _exportarPdfPedidoIndividual(pedido),
-                                    tooltip: 'Exportar PDF',
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.edit, color: Colors.blueAccent),
-                                    onPressed: () => _editarPedido(pedido),
-                                    tooltip: 'Editar',
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.red),
-                                    onPressed: () => _eliminarPedido(pedido['id']),
-                                    tooltip: 'Eliminar',
-                                  ),
-                                ],
+                              IconButton(
+                                icon: const Icon(Icons.edit, color: Colors.blue),
+                                onPressed: () => _editarPedido(p),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => _eliminarPedido(p['id']),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          // Productos desplegados en lista hacia abajo
-                          const Text(
-                            "Productos:",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          ...productosLista.map((prod) => Padding(
-                            padding: const EdgeInsets.only(bottom: 2.0),
-                            child: Text(
-                              "• $prod",
-                              style: TextStyle(
-                                color: Colors.grey[800],
-                                fontSize: 13,
-                              ),
-                            ),
-                          )),
-                          const SizedBox(height: 12),
-                          // Fecha del pedido
-                          Text(
-                            "Fecha: ${pedido['fecha']}",
-                            style: TextStyle(
-                              color: Colors.grey[700],
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          // Total del pedido
-                          Text(
-                            "Total: L ${(pedido['total'] as num?)?.toStringAsFixed(2) ?? '0.00'}",
-                            style: const TextStyle(
-                              color: Colors.black87,
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   );
                 },
-              );
-            },
-          ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
-  // ==========================================
+
+// ==========================================
   // FUNCIÓN PARA GENERAR EL PDF CON EL NUEVO DISEÑO (ESTILO DISCOSMO)
   // ==========================================
   Future<void> _exportarPdfPedidoIndividual(Map<String, dynamic> pedido) async {
