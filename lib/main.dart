@@ -1804,6 +1804,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     query += ' ORDER BY id DESC';
     final pedidos = await db.rawQuery(query, args);
     if (pedidos.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No hay pedidos en el rango de fechas seleccionado')),
       );
@@ -1818,7 +1819,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         margin: const pw.EdgeInsets.all(32),
         build: (pw.Context context) {
           return [
-            // Encabezado institucional ajustado al formato solicitado
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
@@ -1869,11 +1869,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             pw.Divider(thickness: 1, color: PdfColors.blue900),
             pw.SizedBox(height: 10),
 
-            // Tabla del Reporte General con productos en lista hacia abajo
             pw.Table.fromTextArray(
               headers: ['Pedido No.', 'Nombre Cliente', 'Productos', 'Valor Total', 'Fecha'],
               data: pedidos.map((p) {
-                // Parsear productos_json para desplegarlos verticalmente hacia abajo con cantidad
                 String productosTexto = '';
                 try {
                   String prodStr = p['productos_json']?.toString() ?? '';
@@ -1974,12 +1972,14 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   
   Future<void> _generarPdfRangoPedidos() async {
     if (_idPedidoInicio == null || _idPedidoFin == null) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Por favor, selecciona el pedido inicial y final')),
       );
       return;
     }
     if (_idPedidoInicio! > _idPedidoFin!) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('El pedido inicial no puede ser mayor que el final')),
       );
@@ -1993,6 +1993,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       orderBy: 'id ASC',
     );
     if (pedidos.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se encontraron pedidos en ese rango')),
       );
