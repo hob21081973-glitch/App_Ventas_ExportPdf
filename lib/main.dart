@@ -1664,7 +1664,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     pw.Text(
                       "D I C O S M O",
@@ -1716,10 +1716,11 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 try {
                   String prodStr = p['productos_json']?.toString() ?? '';
                   if (prodStr.isNotEmpty) {
+                    // Cambiamos la viñeta por un cuadrito vacío [   ] para el checklist
                     productosTexto = prodStr.split(';')
                         .map((item) => item.trim())
                         .where((item) => item.isNotEmpty)
-                        .map((item) => "• $item")
+                        .map((item) => "[   ] $item")
                         .join('\n');
                   }
                 } catch (_) {
@@ -1750,10 +1751,11 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               ),
               cellStyle: const pw.TextStyle(fontSize: 9),
               cellPadding: const pw.EdgeInsets.all(6),
+              // Ajuste de columnas: Reducimos un poco más el cliente (1.6) y damos más espacio a productos (5.0)
               columnWidths: {
-                0: const pw.FlexColumnWidth(1.4), 
+                0: const pw.FlexColumnWidth(0.9), 
                 1: const pw.FlexColumnWidth(2.0), 
-                2: const pw.FlexColumnWidth(4.5), 
+                2: const pw.FlexColumnWidth(5.5), 
                 3: const pw.FlexColumnWidth(1.3), 
               },
               cellAlignment: pw.Alignment.centerLeft,
@@ -1905,7 +1907,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
-                  // CORREGIDO AQUÍ (eliminado el pw. para evitar conflictos con el tipo de dato)
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Reporte General de Ventas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -1989,7 +1990,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
-                  // CORREGIDO AQUÍ (eliminado el pw. para evitar conflictos con el tipo de dato)
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Reporte por Rango de Pedidos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
