@@ -1726,7 +1726,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   productosTexto = p['productos_json']?.toString() ?? '';
                 }
 
-                // Limpiamos la frase repetida "Pedido #Pedido #11" -> "Pedido 11"
                 String numPedRaw = p['numero_pedido']?.toString() ?? '';
                 if (numPedRaw.isEmpty) {
                   numPedRaw = p['id']?.toString() ?? '';
@@ -1751,7 +1750,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               ),
               cellStyle: const pw.TextStyle(fontSize: 9),
               cellPadding: const pw.EdgeInsets.all(6),
-              // Ajustes solicitados: 4 columnas, columna 1 más ancha para "Pedido 00", columna 2 reducida un 20%, columna 3 y 4 ampliadas.
               columnWidths: {
                 0: const pw.FlexColumnWidth(1.4), 
                 1: const pw.FlexColumnWidth(2.0), 
@@ -1907,7 +1905,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  // CORREGIDO AQUÍ (eliminado el pw. para evitar conflictos con el tipo de dato)
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Reporte General de Ventas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 5),
@@ -1990,7 +1989,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  // CORREGIDO AQUÍ (eliminado el pw. para evitar conflictos con el tipo de dato)
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Reporte por Rango de Pedidos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 5),
