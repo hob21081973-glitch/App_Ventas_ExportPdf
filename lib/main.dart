@@ -790,30 +790,30 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
 // ==========================================
 class VistaHistorialPedidos extends StatefulWidget {
   const VistaHistorialPedidos({super.key});
-
+ 
   @override
   State<VistaHistorialPedidos> createState() => _VistaHistorialPedidosState();
 }
-
+ 
 class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
   String _filtro = '';
-
+ 
   @override
   void initState() {
     super.initState();
     changeNotifierPedidos.addListener(_recargar);
   }
-
+ 
   @override
   void dispose() {
     changeNotifierPedidos.removeListener(_recargar);
     super.dispose();
   }
-
+ 
   void _recargar() {
     if (mounted) setState(() {});
   }
-
+ 
   Future<List<Map<String, dynamic>>> _obtenerPedidos() async {
     final db = await DatabaseHelper.instance.database;
     if (_filtro.isEmpty) {
@@ -827,14 +827,14 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       );
     }
   }
-
+ 
   void _eliminarPedido(int id) async {
     final db = await DatabaseHelper.instance.database;
     await db.delete('pedidos', where: 'id = ?', whereArgs: [id]);
     changeNotifierPedidos.value++;
     setState(() {});
   }
-
+ 
   void _editarPedido(Map<String, dynamic> pedido) async {
     final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
     if (mainState == null) return;
@@ -908,9 +908,9 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       productosEdit,
     );
   }
-
+ 
   // ==========================================
-  // FUNCIÓN PARA GENERAR EL PDF INDIVIDUAL (BIEN ANIDADA)
+  // FUNCIÓN PARA GENERAR EL PDF INDIVIDUAL
   // ==========================================
   Future<void> _exportarPdfPedidoIndividual(Map<String, dynamic> pedido) async {
     final pdf = pw.Document();
@@ -930,7 +930,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       telefonoCliente = resCliente.first['telefono']?.toString() ?? '';
       codigoCliente = resCliente.first['codigo']?.toString() ?? '';
     }
-
+ 
     String prodStr = pedido['productos_json']?.toString() ?? '';
     List<String> items = prodStr.split(';');
     List<List<String>> filasProductos = [];
@@ -947,13 +947,22 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         cantidad = int.tryParse(match.group(1) ?? '1') ?? 1;
         nombreProd = item.replaceFirst(regExp, '').trim();
       }
+
+      // Limpiamos los corchetes del nombre para consultar el precio correctamente en la BD
+      String nombreBusqueda = nombreProd;
+      int bracketStart = nombreBusqueda.indexOf('[');
+      int bracketEnd = nombreBusqueda.lastIndexOf(']');
+      if (bracketStart != -1 && bracketEnd != -1 && bracketEnd > bracketStart) {
+        nombreBusqueda = nombreBusqueda.substring(0, bracketStart).trim();
+      }
+
       conteoTotalUnidades += cantidad;
       
       double precioUnitario = 0.0;
       final resProd = await db.query(
         'productos',
         where: 'nombre = ?',
-        whereArgs: [nombreProd],
+        whereArgs: [nombreBusqueda],
         limit: 1,
       );
       if (resProd.isNotEmpty) {
@@ -1020,16 +1029,16 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
               
               pw.SizedBox(height: 20),
               pw.Table.fromTextArray(
-                headers: ['Cant.', 'Descripción', 'PRECIO UNITARIO', 'VALOR TOTAL'],
+                headers: ['Cantidad', 'Descripción', 'Precio Unitario', 'Valor Total'],
                 data: filasProductos,
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
                 headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
                 cellStyle: const pw.TextStyle(fontSize: 10),
                 columnWidths: {
                   0: const pw.FlexColumnWidth(1),
-                  1: const pw.FlexColumnWidth(5),
-                  2: const pw.FlexColumnWidth(2),
-                  3: const pw.FlexColumnWidth(2),
+                  1: const pw.FlexColumnWidth(6),
+                  2: const pw.FlexColumnWidth(1),
+                  3: const pw.FlexColumnWidth(1),
                 },
                 cellAlignment: pw.Alignment.centerLeft,
                 cellAlignments: {
@@ -1053,7 +1062,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text('TOTAL PRODUCTOS', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: PdfColors.indigo900)),
+                        pw.Text('Total Productos', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: PdfColors.indigo900)),
                         pw.SizedBox(height: 5),
                         pw.Text('Total de ítems: $conteoTotalUnidades', style: const pw.TextStyle(fontSize: 12)),
                       ],
@@ -1082,7 +1091,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
-                            pw.Text('GRAN TOTAL', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
+                            pw.Text('Gran Total', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
                             pw.Text('L ${totalPedido.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: PdfColors.indigo900)),
                           ],
                         ),
@@ -1096,7 +1105,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         },
       ),
     );
-
+ 
     try {
       Directory? directorio;
       if (Platform.isAndroid) {
@@ -1126,6 +1135,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       );
     }
   } 
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1201,7 +1211,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     );
   }
 }
-
 // ==========================================
 // 3. PESTAÑA: GESTIÓN DE CLIENTES
 // ==========================================
@@ -1628,8 +1637,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     String query = 'SELECT * FROM pedidos';
     List<String> args = [];
     if (_fechaInicio != null && _fechaFin != null) {
-      String inicioStr = DateFormat('yyyy-MM-dd').format(_fechaInicio!);
-      String finStr = '${DateFormat('yyyy-MM-dd').format(_fechaFin!)} 23:59';
+      String inicioStr = DateFormat('dd-MM-yy').format(_fechaInicio!);
+      String finStr = '${DateFormat('dd-MM-yy').format(_fechaFin!)} 23:59';
       query += ' WHERE fecha BETWEEN ? AND ?';
       args = [inicioStr, finStr];
     }
@@ -1686,11 +1695,11 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                     ),
                     if (_fechaInicio != null && _fechaFin != null)
                       pw.Text(
-                        'Del: ${DateFormat('dd/MM/yyyy').format(_fechaInicio!)} al ${DateFormat('dd/MM/yyyy').format(_fechaFin!)}',
+                        'Del: ${DateFormat('dd/MM/yy').format(_fechaInicio!)} al ${DateFormat('dd/MM/yy').format(_fechaFin!)}',
                         style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
                       ),
                     pw.Text(
-                      "Fecha: ${DateFormat('dd/MM/yyyy').format(DateTime.now())}",
+                      "Fecha: ${DateFormat('dd/MM/yy').format(DateTime.now())}",
                       style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
                     ),
                   ],
@@ -1717,7 +1726,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   productosTexto = p['productos_json']?.toString() ?? '';
                 }
                 return [
-                  "Pedido #${p['numero_pedido'] ?? p['id']}",
+                  "Ped. #${p['numero_pedido'] ?? p['id']}",
                   p['cliente']?.toString() ?? '',
                   productosTexto,
                   "L. ${(p['total'] as num?)?.toStringAsFixed(2) ?? '0.00'}",
