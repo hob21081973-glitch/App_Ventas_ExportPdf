@@ -1657,7 +1657,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(32),
+        margin: const pw.EdgeInsets.all(24),
         build: (pw.Context context) {
           return [
             pw.Row(
@@ -1710,7 +1710,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             pw.Divider(thickness: 1, color: PdfColors.blue900),
             pw.SizedBox(height: 10),
             pw.Table.fromTextArray(
-              headers: ['Pedido No.', 'Nombre Cliente', 'Productos', 'Valor Total', 'Fecha'],
+              headers: ['Pedido', 'Nombre Cliente', 'Productos', 'Valor Total'],
               data: pedidos.map((p) {
                 String productosTexto = '';
                 try {
@@ -1725,12 +1725,20 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 } catch (_) {
                   productosTexto = p['productos_json']?.toString() ?? '';
                 }
+
+                // Limpiamos la frase repetida "Pedido #Pedido #11" -> "Pedido 11"
+                String numPedRaw = p['numero_pedido']?.toString() ?? '';
+                if (numPedRaw.isEmpty) {
+                  numPedRaw = p['id']?.toString() ?? '';
+                }
+                String numLimpio = numPedRaw.replaceAll('Pedido', '').replaceAll('#', '').trim();
+                String numeroPedidoFormateado = 'Pedido $numLimpio';
+
                 return [
-                  "Ped. #${p['numero_pedido'] ?? p['id']}",
+                  numeroPedidoFormateado,
                   p['cliente']?.toString() ?? '',
                   productosTexto,
                   "L. ${(p['total'] as num?)?.toStringAsFixed(2) ?? '0.00'}",
-                  p['fecha']?.toString() ?? '',
                 ];
               }).toList(),
               headerStyle: pw.TextStyle(
@@ -1743,6 +1751,18 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               ),
               cellStyle: const pw.TextStyle(fontSize: 9),
               cellPadding: const pw.EdgeInsets.all(6),
+              // Ajustes solicitados: 4 columnas, columna 1 más ancha para "Pedido 00", columna 2 reducida un 20%, columna 3 y 4 ampliadas.
+              columnWidths: {
+                0: const pw.FlexColumnWidth(1.4), 
+                1: const pw.FlexColumnWidth(2.0), 
+                2: const pw.FlexColumnWidth(4.5), 
+                3: const pw.FlexColumnWidth(1.3), 
+              },
+              cellAlignment: pw.Alignment.centerLeft,
+              cellAlignments: {
+                0: pw.Alignment.center,
+                3: pw.Alignment.centerRight,
+              },
             ),
           ];
         },
@@ -1887,7 +1907,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     const Text('Reporte General de Ventas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 5),
@@ -1970,7 +1990,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     const Text('Reporte por Rango de Pedidos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 5),
