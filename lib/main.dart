@@ -838,29 +838,29 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
   void _editarPedido(Map<String, dynamic> pedido) async {
     final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
     if (mainState == null) return;
-    
+     
     List<Map<String, dynamic>> productosEdit = [];
     String prodStr = pedido['productos_json']?.toString() ?? '';
     double totalPedido = (pedido['total'] as num?)?.toDouble() ?? 0.0;
-    
+     
     List<String> items = prodStr.split(';');
     int cantidadTotalItems = 0;
-    
+     
     List<Map<String, dynamic>> itemsTemporales = [];
     for (var item in items) {
       item = item.trim();
       if (item.isEmpty) continue;
-      
+       
       RegExp regExp = RegExp(r'\s*\(x(\d+)\)$');
       Match? match = regExp.firstMatch(item);
       int cantidad = 1;
       String nombreProd = item;
-      
+       
       if (match != null) {
         cantidad = int.tryParse(match.group(1) ?? '1') ?? 1;
         nombreProd = item.replaceFirst(regExp, '').trim();
       }
-      
+       
       String comentario = '';
       int bracketStart = nombreProd.indexOf('[');
       int bracketEnd = nombreProd.lastIndexOf(']');
@@ -868,7 +868,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         comentario = nombreProd.substring(bracketStart + 1, bracketEnd).trim();
         nombreProd = nombreProd.substring(0, bracketStart).trim();
       }
-       
+        
       cantidadTotalItems += cantidad;
       itemsTemporales.add({
         'nombre': nombreProd,
@@ -876,9 +876,9 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         'comentario': comentario,
       });
     }
-    
+     
     final db = await DatabaseHelper.instance.database;
-    
+     
     for (var temp in itemsTemporales) {
       double precioUnitario = 0.0;
       final resProd = await db.query(
@@ -887,7 +887,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         whereArgs: [temp['nombre']],
         limit: 1,
       );
-      
+       
       if (resProd.isNotEmpty) {
         precioUnitario = (resProd.first['precio'] as num?)?.toDouble() ?? 0.0;
       } else if (cantidadTotalItems > 0) {
@@ -900,7 +900,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         'comentario': temp['comentario'],
       });
     }
-    
+     
     mainState.cargarPedidoParaEditar(
       pedido['id'],
       pedido['numero_pedido'],
@@ -916,14 +916,14 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     final pdf = pw.Document();
     final db = await DatabaseHelper.instance.database;
     final clienteNombre = pedido['cliente']?.toString() ?? 'Cliente';
-    
+     
     final resCliente = await db.query(
       'clientes',
       where: 'nombre = ?',
       whereArgs: [clienteNombre],
       limit: 1,
     );
-    
+     
     String telefonoCliente = '';
     String codigoCliente = '';
     if (resCliente.isNotEmpty) {
@@ -934,8 +934,8 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     String prodStr = pedido['productos_json']?.toString() ?? '';
     List<String> items = prodStr.split(';');
     List<List<String>> filasProductos = [];
-    int conteoTotalUnidades = 0;
-    
+    int conteoLineasProductos = 0; // Conteo real de ítems (líneas/productos diferentes)
+     
     for (var item in items) {
       item = item.trim();
       if (item.isEmpty) continue;
@@ -956,8 +956,8 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         nombreBusqueda = nombreBusqueda.substring(0, bracketStart).trim();
       }
 
-      conteoTotalUnidades += cantidad;
-      
+      conteoLineasProductos++; // Incrementa por cada tipo de producto diferente
+     
       double precioUnitario = 0.0;
       final resProd = await db.query(
         'productos',
@@ -976,9 +976,17 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         valorTotalFila.toStringAsFixed(2),
       ]);
     }
-    
+     
     double totalPedido = (pedido['total'] as num?)?.toDouble() ?? 0.0;
     
+    // Limpiar formato del número de pedido para evitar duplicidades (ej: "Pedido #01")
+    String numPedRaw = pedido['numero_pedido']?.toString() ?? '';
+    if (numPedRaw.isEmpty) {
+      numPedRaw = pedido['id']?.toString() ?? '';
+    }
+    String numLimpio = numPedRaw.replaceAll('Pedido', '').replaceAll('#', '').trim();
+    String numeroPedidoFormateado = 'Pedido #$numLimpio';
+     
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.letter,
@@ -1011,7 +1019,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                     children: [
                       pw.Text('FECHA: ${pedido['fecha']?.toString().substring(0, 10) ?? ''}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
                       pw.SizedBox(height: 3),
-                      pw.Text('PEDIDO #: ${pedido['numero_pedido']?.toString() ?? ''}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: PdfColors.indigo900)),
+                      pw.Text(numeroPedidoFormateado, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: PdfColors.indigo900)),
                     ],
                   ),
                 ],
@@ -1064,7 +1072,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                       children: [
                         pw.Text('Total Productos', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: PdfColors.indigo900)),
                         pw.SizedBox(height: 5),
-                        pw.Text('Total de ítems: $conteoTotalUnidades', style: const pw.TextStyle(fontSize: 12)),
+                        pw.Text('Total de ítems: $conteoLineasProductos', style: const pw.TextStyle(fontSize: 12)),
                       ],
                     ),
                   ),
@@ -1118,7 +1126,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       } else {
         directorio = await getApplicationDocumentsDirectory();
       }
-      
+       
       String numPedLimpio = (pedido['numero_pedido']?.toString() ?? 'pedido').replaceAll('#', '').replaceAll(' ', '_');
       final ruta = '${directorio!.path}/Nota_$numPedLimpio.pdf';
       final archivo = File(ruta);
@@ -1174,29 +1182,99 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                     itemCount: pedidos.length,
                     itemBuilder: (context, index) {
                       final p = pedidos[index];
-                      return Card(
+                      
+                      final String numPedido = p['numero_pedido']?.toString() ?? 'Pedido #${p['id']}';
+                      final String cliente = p['cliente']?.toString() ?? 'Sin cliente';
+                      final String fecha = p['fecha']?.toString() ?? '';
+                      final double total = (p['total'] as num?)?.toDouble() ?? 0.0;
+                      
+                      String productosJson = p['productos_json']?.toString() ?? '';
+                      List<String> listaProductos = productosJson
+                          .split(';')
+                          .map((prod) => prod.trim())
+                          .where((prod) => prod.isNotEmpty)
+                          .toList();
+
+                      return Container(
+                        width: double.infinity,
                         margin: const EdgeInsets.symmetric(vertical: 6),
-                        child: ListTile(
-                          title: Text('${p['numero_pedido']} - ${p['cliente']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
-                          subtitle: Text('Productos: ${p['productos_json']}\nFecha: ${p['fecha']}\nTotal: L ${(p['total'] as num).toStringAsFixed(2)}', style: const TextStyle(fontSize: 13)),
-                          isThreeLine: true,
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.picture_as_pdf, color: Colors.indigo),
-                                tooltip: 'Generar PDF del Pedido',
-                                onPressed: () => _exportarPdfPedidoIndividual(p),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.edit, color: Colors.blue),
-                                onPressed: () => _editarPedido(p),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _eliminarPedido(p['id']),
-                              ),
-                            ],
+                        child: Card(
+                          elevation: 3,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      numPedido,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.indigo,
+                                      ),
+                                    ),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.picture_as_pdf, color: Colors.indigo, size: 22),
+                                          tooltip: 'Generar PDF del Pedido',
+                                          onPressed: () => _exportarPdfPedidoIndividual(p),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.edit, color: Colors.blue, size: 22),
+                                          onPressed: () => _editarPedido(p),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete, color: Colors.red, size: 22),
+                                          onPressed: () => _eliminarPedido(p['id']),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const Divider(height: 16),
+                                Text(
+                                  cliente,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                ),
+                                const SizedBox(height: 10),
+                                const Text(
+                                  'Productos:',
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo),
+                                ),
+                                const SizedBox(height: 4),
+                                ...listaProductos.map((prod) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 2),
+                                  child: Text(
+                                    '• $prod',
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                )),
+                                const Divider(height: 16),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Total: L ${total.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green,
+                                      ),
+                                    ),
+                                    Text(
+                                      fecha,
+                                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -1211,6 +1289,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     );
   }
 }
+
 // ==========================================
 // 3. PESTAÑA: GESTIÓN DE CLIENTES
 // ==========================================
@@ -1664,7 +1743,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
                       "D I C O S M O",
