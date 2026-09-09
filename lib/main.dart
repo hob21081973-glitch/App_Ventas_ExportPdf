@@ -957,8 +957,8 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       }
 
       conteoLineasProductos++; // Incrementa por cada tipo de producto diferente
-     
-      double precioUnitario = 0.0;
+     double precioUnitario = 0.0;
+      String codigoProd = '';
       final resProd = await db.query(
         'productos',
         where: 'nombre = ?',
@@ -967,11 +967,16 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       );
       if (resProd.isNotEmpty) {
         precioUnitario = (resProd.first['precio'] as num?)?.toDouble() ?? 0.0;
+        codigoProd = resProd.first['codigo']?.toString() ?? '';
       }
+
+      // Agregar el código del producto entre corchetes antes del nombre si existe
+      String nombreConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
+
       double valorTotalFila = precioUnitario * cantidad;
       filasProductos.add([
         cantidad.toString(),
-        nombreProd,
+        nombreConCodigo,
         precioUnitario.toStringAsFixed(2),
         valorTotalFila.toStringAsFixed(2),
       ]);
@@ -979,14 +984,10 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
      
     double totalPedido = (pedido['total'] as num?)?.toDouble() ?? 0.0;
     
-    // Limpiar formato del número de pedido para evitar duplicidades (ej: "Pedido #01")
-    String numPedRaw = pedido['numero_pedido']?.toString() ?? '';
-    if (numPedRaw.isEmpty) {
-      numPedRaw = pedido['id']?.toString() ?? '';
-    }
-    String numLimpio = numPedRaw.replaceAll('Pedido', '').replaceAll('#', '').trim();
-    String numeroPedidoFormateado = 'Pedido #$numLimpio';
-     
+    // Toma directamente el formato del pedido (ej. Pedido_01)
+          String numPedLimpio = (pedido['numero_pedido']?.toString() ?? 'Pedido').replaceAll(' ', '_');
+          final ruta = '${directorio!.path}/$numPedLimpio.pdf';     
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.letter,
@@ -1733,6 +1734,94 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     
     final pdf = pw.Document();
     
+    // Procesar datos para incluir códigos de clientes y productos
+    List<List<String>> filasReporte = [];
+
+    for (var p in pedidos) {
+      String nombreClienteRaw = p['cliente']?.toString() ?? '';
+      String codigoCliente = '';
+      
+      // Buscar código del cliente en la BD
+      if (nombreClienteRaw.isNotEmpty) {
+        final resCliente = await db.query(
+          'clientes',
+          where: 'nombre = ?',
+          whereArgs: [nombreClienteRaw],
+          limit: 1,
+        );
+        if (resCliente.isNotEmpty) {
+          codigoCliente = resCliente.first['codigo']?.toString() ?? '';
+        }
+      }
+      
+      // Formato cliente con código entre corchetes: [C001] Nombre Cliente
+      String clienteConCodigo = codigoCliente.isNotEmpty ? '[$codigoCliente] $nombreClienteRaw' : nombreClienteRaw;
+
+      // Procesar productos del pedido
+      String productosTexto = '';
+      try {
+        String prodStr = p['productos_json']?.toString() ?? '';
+        if (prodStr.isNotEmpty) {
+          List<String> items = prodStr.split(';');
+          List<String> itemsProcesados = [];
+          
+          for (var item in items) {
+            item = item.trim();
+            if (item.isEmpty) continue;
+            
+            RegExp regExp = RegExp(r'\s*\(x(\d+)\)$');
+            Match? match = regExp.firstMatch(item);
+            int cantidad = 1;
+            String nombreProd = item;
+            if (match != null) {
+              cantidad = int.tryParse(match.group(1) ?? '1') ?? 1;
+              nombreProd = item.replaceFirst(regExp, '').trim();
+            }
+
+            // Limpiar corchetes previos si los tuviera en el JSON
+            int bracketStart = nombreProd.indexOf('[');
+            int bracketEnd = nombreProd.lastIndexOf(']');
+            if (bracketStart != -1 && bracketEnd != -1 && bracketEnd > bracketStart) {
+              nombreProd = nombreProd.substring(0, bracketStart).trim();
+            }
+
+            // Buscar código del producto en la BD
+            String codigoProd = '';
+            final resProd = await db.query(
+              'productos',
+              where: 'nombre = ?',
+              whereArgs: [nombreProd],
+              limit: 1,
+            );
+            if (resProd.isNotEmpty) {
+              codigoProd = resProd.first['codigo']?.toString() ?? '';
+            }
+
+            // Formato de producto: [   ] [P001] Nombre Producto (x2)
+            String prodConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
+            itemsProcesados.append?('\n') ?? itemsProcesados.add('[   ] $prodConCodigo (x$cantidad)');
+          }
+          productosTexto = itemsProcesados.join('\n');
+        }
+      } catch (_) {
+        productosTexto = p['productos_json']?.toString() ?? '';
+      }
+
+      String numPedRaw = p['numero_pedido']?.toString() ?? '';
+      if (numPedRaw.isEmpty) {
+        numPedRaw = p['id']?.toString() ?? '';
+      }
+      String numLimpio = numPedRaw.replaceAll('Pedido', '').replaceAll('#', '').trim();
+      String numeroPedidoFormateado = 'Pedido $numLimpio';
+
+      filasReporte.add([
+        numeroPedidoFormateado,
+        clienteConCodigo,
+        productosTexto,
+        "L. ${(p['total'] as num?)?.toStringAsFixed(2) ?? '0.00'}",
+      ]);
+    }
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
@@ -1746,7 +1835,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
-                      "D I C O S M O",
+                      "D  I  C  O  S  M  O",
                       style: pw.TextStyle(
                         fontSize: 18,
                         fontWeight: pw.FontWeight.bold,
@@ -1754,7 +1843,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                       ),
                     ),
                     pw.Text(
-                      "DISTRIBUIDOR DE PRODUCTOS CHAMER Y MAS",
+                      "DISTRIBUIDOR DE PRODUCTOS CHAMER MEDICAMENTOS UTILES ESCOLARES NOVEDADES Y MAS",
                       style: const pw.TextStyle(
                         fontSize: 9,
                         color: PdfColors.grey700,
@@ -1790,36 +1879,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             pw.SizedBox(height: 10),
             pw.Table.fromTextArray(
               headers: ['Pedido', 'Nombre Cliente', 'Productos', 'Valor Total'],
-              data: pedidos.map((p) {
-                String productosTexto = '';
-                try {
-                  String prodStr = p['productos_json']?.toString() ?? '';
-                  if (prodStr.isNotEmpty) {
-                    // Cambiamos la viñeta por un cuadrito vacío [   ] para el checklist
-                    productosTexto = prodStr.split(';')
-                        .map((item) => item.trim())
-                        .where((item) => item.isNotEmpty)
-                        .map((item) => "[   ] $item")
-                        .join('\n');
-                  }
-                } catch (_) {
-                  productosTexto = p['productos_json']?.toString() ?? '';
-                }
-
-                String numPedRaw = p['numero_pedido']?.toString() ?? '';
-                if (numPedRaw.isEmpty) {
-                  numPedRaw = p['id']?.toString() ?? '';
-                }
-                String numLimpio = numPedRaw.replaceAll('Pedido', '').replaceAll('#', '').trim();
-                String numeroPedidoFormateado = 'Pedido $numLimpio';
-
-                return [
-                  numeroPedidoFormateado,
-                  p['cliente']?.toString() ?? '',
-                  productosTexto,
-                  "L. ${(p['total'] as num?)?.toStringAsFixed(2) ?? '0.00'}",
-                ];
-              }).toList(),
+              data: filasReporte,
               headerStyle: pw.TextStyle(
                 fontWeight: pw.FontWeight.bold,
                 color: PdfColors.white,
@@ -1830,10 +1890,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               ),
               cellStyle: const pw.TextStyle(fontSize: 9),
               cellPadding: const pw.EdgeInsets.all(6),
-              // Ajuste de columnas: Reducimos un poco más el cliente (1.6) y damos más espacio a productos (5.0)
               columnWidths: {
                 0: const pw.FlexColumnWidth(0.9), 
-                1: const pw.FlexColumnWidth(2.0), 
+                1: const pw.FlexColumnWidth(2.2), 
                 2: const pw.FlexColumnWidth(5.5), 
                 3: const pw.FlexColumnWidth(1.3), 
               },
@@ -1857,6 +1916,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     final db = await DatabaseHelper.instance.database;
     final pedidos = await db.query('pedidos');
     Map<String, int> conteoProductos = {};
+    
     for (var pedido in pedidos) {
       String productosJson = pedido['productos_json']?.toString() ?? '';
       List<String> items = productosJson.split(';');
@@ -1879,12 +1939,35 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         conteoProductos[nombreProd] = (conteoProductos[nombreProd] ?? 0) + cantidad;
       }
     }
+    
     final listaOrdenada = conteoProductos.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+    
+    // Obtener código de cada producto y formatear con corchetes
+    List<List<String>> filasProductosVendidos = [];
+    for (var entry in listaOrdenada) {
+      String nombreProd = entry.key;
+      int cantidadTotal = entry.value;
+      String codigoProd = '';
+
+      final resProd = await db.query(
+        'productos',
+        where: 'nombre = ?',
+        whereArgs: [nombreProd],
+        limit: 1,
+      );
+      if (resProd.isNotEmpty) {
+        codigoProd = resProd.first['codigo']?.toString() ?? '';
+      }
+
+      String productoConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
+      filasProductosVendidos.add([productoConCodigo, cantidadTotal.toString()]);
+    }
     
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.all(32),
         build: (pw.Context context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1893,10 +1976,18 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               pw.SizedBox(height: 15),
               pw.Table.fromTextArray(
                 headers: ['Producto', 'Cantidad Total Vendida'],
-                data: listaOrdenada.map((e) => [e.key, e.value.toString()]).toList(),
+                data: filasProductosVendidos,
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
                 headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
                 cellStyle: const pw.TextStyle(fontSize: 10),
+                // Ampliamos la primera columna (producto con código) y reducimos la segunda (cantidad)
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(4.5),
+                  1: const pw.FlexColumnWidth(1.2),
+                },
+                cellAlignments: {
+                  1: pw.Alignment.center,
+                },
               ),
             ],
           );
