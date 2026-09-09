@@ -1687,6 +1687,22 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   DateTime? _fechaInicio;
   DateTime? _fechaFin;
   
+  // Variables y controladores para el Reporte General Por Cliente
+  String? _clienteSeleccionadoParaReporte;
+  final Map<int, TextEditingController> _valorEntregadoControllers = {};
+  final Map<int, TextEditingController> _comentarioControllers = {};
+
+  @override
+  void dispose() {
+    for (var controller in _valorEntregadoControllers.values) {
+      controller.dispose();
+    }
+    for (var controller in _comentarioControllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+  
   Future<void> _guardarYCompartirPdf(pw.Document pdf, String nombreArchivo) async {
     try {
       Directory? directorio;
@@ -2150,6 +2166,164 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     String nombre = 'Rango_Pedidos_${DateTime.now().millisecondsSinceEpoch}.pdf';
     await _guardarYCompartirPdf(pdf, nombre);
   }
+
+  Future<void> _generarPdfReporteGeneralPorCliente() async {
+    if (_clienteSeleccionadoParaReporte == null || _clienteSeleccionadoParaReporte!.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, seleccione un cliente')),
+      );
+      return;
+    }
+
+    final db = await DatabaseHelper.instance.database;
+    final pedidos = await db.query(
+      'pedidos',
+      where: 'cliente = ?',
+      whereArgs: [_clienteSeleccionadoParaReporte],
+      orderBy: 'id ASC',
+    );
+
+    if (pedidos.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay pedidos registrados para este cliente')),
+      );
+      return;
+    }
+
+    // Obtener código del cliente
+    String codigoCliente = '';
+    final resCliente = await db.query(
+      'clientes',
+      where: 'nombre = ?',
+      whereArgs: [_clienteSeleccionadoParaReporte],
+      limit: 1,
+    );
+    if (resCliente.isNotEmpty) {
+      codigoCliente = resCliente.first['codigo']?.toString() ?? '';
+    }
+    String clienteConCodigo = codigoCliente.isNotEmpty 
+        ? '[$codigoCliente] $_clienteSeleccionadoParaReporte' 
+        : _clienteSeleccionadoParaReporte!;
+
+    List<List<String>> filasReporteCliente = [];
+
+    for (var p in pedidos) {
+      int idPedido = p['id'] as int;
+      String numPedRaw = p['numero_pedido']?.toString() ?? '';
+      if (numPedRaw.isEmpty) {
+        numPedRaw = 'Pedido #$idPedido';
+      } else if (!numPedRaw.toLowerCase().contains('pedido')) {
+        numPedRaw = 'Pedido $numPedRaw';
+      }
+
+      double totalPedido = (p['total'] as num?)?.toDouble() ?? 0.0;
+      
+      // Tomar valores de los controladores de UI
+      String valEntregadoStr = _valorEntregadoControllers[idPedido]?.text.trim() ?? '';
+      double valEntregado = double.tryParse(valEntregadoStr) ?? totalPedido;
+
+      String comentario = _comentarioControllers[idPedido]?.text.trim() ?? '';
+
+      filasReporteCliente.add([
+        numPedRaw,
+        'L. ${totalPedido.toStringAsFixed(2)}',
+        'L. ${valEntregado.toStringAsFixed(2)}',
+        comentario.isEmpty ? '-' : comentario,
+      ]);
+    }
+
+    final pdf = pw.Document();
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.all(24),
+        build: (pw.Context context) {
+          return [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      "D  I  C  O  S  M  O",
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue900,
+                      ),
+                    ),
+                    pw.Text(
+                      "PRODUCTOS CHAMER MEDICAMENTOS UTILES ESCOLARES NOVEDADES Y MAS",
+                      style: const pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      "REPORTE GENERAL POR CLIENTE",
+                      style: pw.TextStyle(
+                        fontSize: 14,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.Text(
+                      "Fecha: ${DateFormat('dd/MM/yy').format(DateTime.now())}",
+                      style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+            pw.Divider(thickness: 1, color: PdfColors.blue900),
+            pw.SizedBox(height: 5),
+            pw.Text(
+              "Cliente: $clienteConCodigo",
+              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
+            ),
+            pw.SizedBox(height: 10),
+            pw.Table.fromTextArray(
+              headers: ['Pedido #', 'Total Pedido', 'Total Entregado', 'Comentario'],
+              data: filasReporteCliente,
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white,
+                fontSize: 10,
+              ),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.blue900,
+              ),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              cellPadding: const pw.EdgeInsets.all(6),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2.0),
+                1: const pw.FlexColumnWidth(2.0),
+                2: const pw.FlexColumnWidth(2.0),
+                3: const pw.FlexColumnWidth(3.5),
+              },
+              cellAlignments: {
+                0: pw.Alignment.center,
+                1: pw.Alignment.centerRight,
+                2: pw.Alignment.centerRight,
+                3: pw.Alignment.centerLeft,
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    String nombre = 'Reporte_Cliente_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    await _guardarYCompartirPdf(pdf, nombre);
+  }
   
   @override
   Widget build(BuildContext context) {
@@ -2242,6 +2416,162 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
                   onPressed: _generarPdfProductosVendidos,
                   child: const Text('Exportar'),
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            // ========================================================
+            // NUEVA SECCIÓN: REPORTE GENERAL POR CLIENTE
+            // ========================================================
+            Card(
+              elevation: 3,
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Reporte General Por Cliente', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 5),
+                    const Text('Selecciona un cliente para registrar valores entregados y comentarios por pedido.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    const SizedBox(height: 10),
+                    FutureBuilder<List<Map<String, dynamic>>>(
+                      future: DatabaseHelper.instance.database.then((db) => db.query('clientes', orderBy: 'nombre ASC')),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return const CircularProgressIndicator();
+                        final clientes = snapshot.data!;
+                        if (clientes.isEmpty) {
+                          return const Text('No hay clientes registrados.', style: TextStyle(color: Colors.red, fontSize: 12));
+                        }
+                        
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            DropdownButtonFormField<String>(
+                              decoration: const InputDecoration(
+                                labelText: 'Seleccionar Cliente',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              ),
+                              value: _clienteSeleccionadoParaReporte,
+                              items: clientes.map((c) {
+                                String nombreC = c['nombre']?.toString() ?? '';
+                                String codigoC = c['codigo']?.toString() ?? '';
+                                String labelText = codigoC.isNotEmpty ? '[$codigoC] $nombreC' : nombreC;
+                                return DropdownMenuItem<String>(
+                                  value: nombreC,
+                                  child: Text(labelText, overflow: TextOverflow.ellipsis),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                setState(() {
+                                  _clienteSeleccionadoParaReporte = val;
+                                  _valorEntregadoControllers.clear();
+                                  _comentarioControllers.clear();
+                                });
+                              },
+                            ),
+                            if (_clienteSeleccionadoParaReporte != null) ...[
+                              const SizedBox(height: 15),
+                              FutureBuilder<List<Map<String, dynamic>>>(
+                                future: DatabaseHelper.instance.database.then((db) => db.query(
+                                  'pedidos',
+                                  where: 'cliente = ?',
+                                  whereArgs: [_clienteSeleccionadoParaReporte],
+                                  orderBy: 'id ASC',
+                                )),
+                                builder: (context, snapshotPedidos) {
+                                  if (!snapshotPedidos.hasData) return const Center(child: CircularProgressIndicator());
+                                  final pedidosCliente = snapshotPedidos.data!;
+                                  if (pedidosCliente.isEmpty) {
+                                    return const Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 8.0),
+                                      child: Text('Este cliente no tiene pedidos registrados.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                    );
+                                  }
+
+                                  return Column(
+                                    children: pedidosCliente.map((p) {
+                                      int idPedido = p['id'] as int;
+                                      double totalPedido = (p['total'] as num?)?.toDouble() ?? 0.0;
+                                      String numPedRaw = p['numero_pedido']?.toString() ?? '';
+                                      if (numPedRaw.isEmpty) numPedRaw = 'Pedido #$idPedido';
+
+                                      // Inicializar controladores si no existen
+                                      _valorEntregadoControllers.putIfAbsent(
+                                        idPedido, 
+                                        () => TextEditingController(text: totalPedido.toStringAsFixed(2))
+                                      );
+                                      _comentarioControllers.putIfAbsent(
+                                        idPedido, 
+                                        () => TextEditingController(text: 'Entregado')
+                                      );
+
+                                      return Container(
+                                        margin: const EdgeInsets.only(bottom: 10),
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(color: Colors.grey.shade300),
+                                          borderRadius: BorderRadius.circular(6),
+                                          color: Colors.grey.shade50,
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '$numPedRaw (Total: L. ${totalPedido.toStringAsFixed(2)})',
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: TextField(
+                                                    controller: _valorEntregadoControllers[idPedido],
+                                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                                    decoration: const InputDecoration(
+                                                      labelText: 'Valor Entregado',
+                                                      border: OutlineInputBorder(),
+                                                      isDense: true,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  flex: 2,
+                                                  child: TextField(
+                                                    controller: _comentarioControllers[idPedido],
+                                                    decoration: const InputDecoration(
+                                                      labelText: 'Comentario',
+                                                      border: OutlineInputBorder(),
+                                                      isDense: true,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 10),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                                  onPressed: _generarPdfReporteGeneralPorCliente,
+                                  icon: const Icon(Icons.picture_as_pdf),
+                                  label: const Text('Exportar Reporte Por Cliente'),
+                                ),
+                              ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
             ),
