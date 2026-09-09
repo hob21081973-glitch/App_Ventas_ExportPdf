@@ -930,7 +930,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       telefonoCliente = resCliente.first['telefono']?.toString() ?? '';
       codigoCliente = resCliente.first['codigo']?.toString() ?? '';
     }
- 
+
     String prodStr = pedido['productos_json']?.toString() ?? '';
     List<String> items = prodStr.split(';');
     List<List<String>> filasProductos = [];
@@ -957,7 +957,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       }
 
       conteoLineasProductos++; // Incrementa por cada tipo de producto diferente
-     double precioUnitario = 0.0;
+      double precioUnitario = 0.0;
       String codigoProd = '';
       final resProd = await db.query(
         'productos',
@@ -983,10 +983,25 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     }
      
     double totalPedido = (pedido['total'] as num?)?.toDouble() ?? 0.0;
-    
-    // Toma directamente el formato del pedido (ej. Pedido_01)
-          String numPedLimpio = (pedido['numero_pedido']?.toString() ?? 'Pedido').replaceAll(' ', '_');
-          final ruta = '${directorio!.path}/$numPedLimpio.pdf';     
+   
+    // Declaración correcta de variables faltantes (directorio y numeroPedidoFormateado)
+    Directory? directorio;
+    if (Platform.isAndroid) {
+      final directories = await getExternalStorageDirectories(type: StorageDirectory.downloads);
+      if (directories != null && directories.isNotEmpty) {
+        directorio = directories.first;
+      } else {
+        directorio = await getExternalStorageDirectory();
+      }
+    } else {
+      directorio = await getApplicationDocumentsDirectory();
+    }
+
+    String numPedidoRaw = pedido['numero_pedido']?.toString() ?? '';
+    if (numPedidoRaw.isEmpty) {
+      numPedidoRaw = 'Pedido #${pedido['id']}';
+    }
+    String numeroPedidoFormateado = numPedidoRaw;
 
     pdf.addPage(
       pw.Page(
@@ -1035,7 +1050,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                 pw.Text('Código: $codigoCliente', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
               if (telefonoCliente.isNotEmpty)
                 pw.Text('Teléfono: $telefonoCliente', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
-              
+             
               pw.SizedBox(height: 20),
               pw.Table.fromTextArray(
                 headers: ['Cantidad', 'Descripción', 'Precio Unitario', 'Valor Total'],
@@ -1116,18 +1131,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     );
  
     try {
-      Directory? directorio;
-      if (Platform.isAndroid) {
-        final directories = await getExternalStorageDirectories(type: StorageDirectory.downloads);
-        if (directories != null && directories.isNotEmpty) {
-          directorio = directories.first;
-        } else {
-          directorio = await getExternalStorageDirectory();
-        }
-      } else {
-        directorio = await getApplicationDocumentsDirectory();
-      }
-       
       String numPedLimpio = (pedido['numero_pedido']?.toString() ?? 'pedido').replaceAll('#', '').replaceAll(' ', '_');
       final ruta = '${directorio!.path}/Nota_$numPedLimpio.pdf';
       final archivo = File(ruta);
@@ -1183,12 +1186,12 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                     itemCount: pedidos.length,
                     itemBuilder: (context, index) {
                       final p = pedidos[index];
-                      
+                       
                       final String numPedido = p['numero_pedido']?.toString() ?? 'Pedido #${p['id']}';
                       final String cliente = p['cliente']?.toString() ?? 'Sin cliente';
                       final String fecha = p['fecha']?.toString() ?? '';
                       final double total = (p['total'] as num?)?.toDouble() ?? 0.0;
-                      
+                       
                       String productosJson = p['productos_json']?.toString() ?? '';
                       List<String> listaProductos = productosJson
                           .split(';')
@@ -1290,7 +1293,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     );
   }
 }
-
 // ==========================================
 // 3. PESTAÑA: GESTIÓN DE CLIENTES
 // ==========================================
@@ -1832,7 +1834,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
-                      "D I C O S M O",
+                      "D  I  C  O  S  M  O",
                       style: pw.TextStyle(
                         fontSize: 18,
                         fontWeight: pw.FontWeight.bold,
@@ -1840,7 +1842,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                       ),
                     ),
                     pw.Text(
-                      "DISTRIBUIDOR DE PRODUCTOS CHAMER Y MAS",
+                      "DISTRIBUIDOR DE PRODUCTOS CHAMER MEDICAMENTOS UTILES ESCOLARES NOVEDADES Y MAS",
                       style: const pw.TextStyle(
                         fontSize: 9,
                         color: PdfColors.grey700,
