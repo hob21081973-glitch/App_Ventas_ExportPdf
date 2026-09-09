@@ -1794,7 +1794,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
 
             String prodConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
             
-            // Corrección aquí: Usamos .add() correctamente en la lista
             if (itemsProcesados.isNotEmpty) {
               itemsProcesados.add('\n');
             }
@@ -1911,14 +1910,33 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   }
   
   Future<void> _generarPdfProductosVendidos() async {
-    final pdf = pw.Document();
     final db = await DatabaseHelper.instance.database;
-    final pedidos = await db.query('pedidos');
-    Map<String, int> conteoProductos = {};
     
+    String query = 'SELECT * FROM pedidos';
+    List<String> args = [];
+    if (_fechaInicio != null && _fechaFin != null) {
+      String inicioStr = DateFormat('dd-MM-yy').format(_fechaInicio!);
+      String finStr = '${DateFormat('dd-MM-yy').format(_fechaFin!)} 23:59';
+      query += ' WHERE fecha BETWEEN ? AND ?';
+      args = [inicioStr, finStr];
+    }
+    
+    final pedidos = await db.rawQuery(query, args);
+    if (pedidos.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay pedidos en el rango de fechas seleccionado')),
+      );
+      return;
+    }
+
+    Map<String, int> conteoProductos = {};
+    Map<String, double> valorTotalProductos = {};
+
     for (var pedido in pedidos) {
       String productosJson = pedido['productos_json']?.toString() ?? '';
       List<String> items = productosJson.split(';');
+      
       for (var item in items) {
         item = item.trim();
         if (item.isEmpty) continue;
@@ -1935,18 +1953,34 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             nombreProd = nombreProd.substring(0, bracketIdx).trim();
           }
         }
+
         conteoProductos[nombreProd] = (conteoProductos[nombreProd] ?? 0) + cantidad;
+
+        final resProd = await db.query(
+          'productos',
+          where: 'nombre = ?',
+          whereArgs: [nombreProd],
+          limit: 1,
+        );
+
+        double precioUnitario = 0.0;
+        if (resProd.isNotEmpty) {
+          precioUnitario = (resProd.first['precio'] as num?)?.toDouble() ?? 0.0;
+        }
+
+        double subtotalItem = precioUnitario * cantidad;
+        valorTotalProductos[nombreProd] = (valorTotalProductos[nombreProd] ?? 0.0) + subtotalItem;
       }
     }
-    
+
     final listaOrdenada = conteoProductos.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    
-    // Obtener código de cada producto y formatear con corchetes
+      ..sort((a, b) => a.key.compareTo(b.key));
+
     List<List<String>> filasProductosVendidos = [];
     for (var entry in listaOrdenada) {
       String nombreProd = entry.key;
       int cantidadTotal = entry.value;
+      double valorTotal = valorTotalProductos[nombreProd] ?? 0.0;
       String codigoProd = '';
 
       final resProd = await db.query(
@@ -1960,36 +1994,94 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       }
 
       String productoConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
-      filasProductosVendidos.add([productoConCodigo, cantidadTotal.toString()]);
+      filasProductosVendidos.add([
+        productoConCodigo,
+        cantidadTotal.toString(),
+        'L. ${valorTotal.toStringAsFixed(2)}'
+      ]);
     }
     
+    final pdf = pw.Document();
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(32),
+        margin: const pw.EdgeInsets.all(24),
         build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('Reporte de Productos Vendidos', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 15),
-              pw.Table.fromTextArray(
-                headers: ['Producto', 'Cantidad Total Vendida'],
-                data: filasProductosVendidos,
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
-                cellStyle: const pw.TextStyle(fontSize: 10),
-                // Ampliamos la primera columna (producto con código) y reducimos la segunda (cantidad)
-                columnWidths: {
-                  0: const pw.FlexColumnWidth(4.5),
-                  1: const pw.FlexColumnWidth(1.2),
-                },
-                cellAlignments: {
-                  1: pw.Alignment.center,
-                },
+          return [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      "D  I  C  O  S  M  O",
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue900,
+                      ),
+                    ),
+                    pw.Text(
+                      "PRODUCTOS CHAMER MEDICAMENTOS UTILES ESCOLARES NOVEDADES Y MAS",
+                      style: const pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      "Reporte General de Productos Vendidos",
+                      style: pw.TextStyle(
+                        fontSize: 14,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    if (_fechaInicio != null && _fechaFin != null)
+                      pw.Text(
+                        'Del: ${DateFormat('dd/MM/yy').format(_fechaInicio!)} al ${DateFormat('dd/MM/yy').format(_fechaFin!)}',
+                        style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                      ),
+                    pw.Text(
+                      "Fecha: ${DateFormat('dd/MM/yy').format(DateTime.now())}",
+                      style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 15),
+            pw.Divider(thickness: 1, color: PdfColors.blue900),
+            pw.SizedBox(height: 10),
+            pw.Table.fromTextArray(
+              headers: ['NOMBRE DEL PRODUCTO', 'CANTIDAD', 'VALOR TOTAL'],
+              data: filasProductosVendidos,
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white,
+                fontSize: 10,
               ),
-            ],
-          );
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.blue900,
+              ),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              cellPadding: const pw.EdgeInsets.all(6),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(4.5),
+                1: const pw.FlexColumnWidth(1.5),
+                2: const pw.FlexColumnWidth(2.0),
+              },
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.center,
+                2: pw.Alignment.centerRight,
+              },
+            ),
+          ];
         },
       ),
     );
