@@ -1733,15 +1733,12 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     }
     
     final pdf = pw.Document();
-    
-    // Procesar datos para incluir códigos de clientes y productos
     List<List<String>> filasReporte = [];
 
     for (var p in pedidos) {
       String nombreClienteRaw = p['cliente']?.toString() ?? '';
       String codigoCliente = '';
       
-      // Buscar código del cliente en la BD
       if (nombreClienteRaw.isNotEmpty) {
         final resCliente = await db.query(
           'clientes',
@@ -1754,10 +1751,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         }
       }
       
-      // Formato cliente con código entre corchetes: [C001] Nombre Cliente
       String clienteConCodigo = codigoCliente.isNotEmpty ? '[$codigoCliente] $nombreClienteRaw' : nombreClienteRaw;
 
-      // Procesar productos del pedido
       String productosTexto = '';
       try {
         String prodStr = p['productos_json']?.toString() ?? '';
@@ -1778,14 +1773,12 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               nombreProd = item.replaceFirst(regExp, '').trim();
             }
 
-            // Limpiar corchetes previos si los tuviera en el JSON
             int bracketStart = nombreProd.indexOf('[');
             int bracketEnd = nombreProd.lastIndexOf(']');
             if (bracketStart != -1 && bracketEnd != -1 && bracketEnd > bracketStart) {
               nombreProd = nombreProd.substring(0, bracketStart).trim();
             }
 
-            // Buscar código del producto en la BD
             String codigoProd = '';
             final resProd = await db.query(
               'productos',
@@ -1797,11 +1790,15 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               codigoProd = resProd.first['codigo']?.toString() ?? '';
             }
 
-            // Formato de producto: [   ] [P001] Nombre Producto (x2)
             String prodConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
-            itemsProcesados.append?('\n') ?? itemsProcesados.add('[   ] $prodConCodigo (x$cantidad)');
+            
+            // Corrección aquí: Usamos .add() correctamente en la lista
+            if (itemsProcesados.isNotEmpty) {
+              itemsProcesados.add('\n');
+            }
+            itemsProcesados.add('[   ] $prodConCodigo (x$cantidad)');
           }
-          productosTexto = itemsProcesados.join('\n');
+          productosTexto = itemsProcesados.join('');
         }
       } catch (_) {
         productosTexto = p['productos_json']?.toString() ?? '';
@@ -1835,7 +1832,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
-                      "D  I  C  O  S  M  O",
+                      "D I C O S M O",
                       style: pw.TextStyle(
                         fontSize: 18,
                         fontWeight: pw.FontWeight.bold,
@@ -1843,7 +1840,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                       ),
                     ),
                     pw.Text(
-                      "DISTRIBUIDOR DE PRODUCTOS CHAMER MEDICAMENTOS UTILES ESCOLARES NOVEDADES Y MAS",
+                      "DISTRIBUIDOR DE PRODUCTOS CHAMER Y MAS",
                       style: const pw.TextStyle(
                         fontSize: 9,
                         color: PdfColors.grey700,
