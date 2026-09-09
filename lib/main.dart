@@ -1842,7 +1842,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                       ),
                     ),
                     pw.Text(
-                      "DISTRIBUIDOR DE PRODUCTOS CHAMER MEDICAMENTOS UTILES ESCOLARES NOVEDADES Y MAS",
+                      "PRODUCTOS CHAMER MEDICAMENTOS UTILES ESCOLARES NOVEDADES Y MAS",
                       style: const pw.TextStyle(
                         fontSize: 9,
                         color: PdfColors.grey700,
