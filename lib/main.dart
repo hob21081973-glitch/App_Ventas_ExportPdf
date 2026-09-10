@@ -1682,8 +1682,6 @@ class VistaExportarPdf extends StatefulWidget {
 }
 
 class _VistaExportarPdfState extends State<VistaExportarPdf> {
-  int? _idPedidoInicio;
-  int? _idPedidoFin;
   DateTime? _fechaInicio;
   DateTime? _fechaFin;
   
@@ -2066,7 +2064,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
                     pw.Text(
-                      "Reporte General de Productos Vendidos",
+                      "Reporte Gral de Productos Vendidos",
                       style: pw.TextStyle(
                         fontSize: 14,
                         fontWeight: pw.FontWeight.bold,
@@ -2118,67 +2116,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     );
     
     String nombre = 'Reporte_Productos_${DateTime.now().millisecondsSinceEpoch}.pdf';
-    await _guardarYCompartirPdf(pdf, nombre);
-  }
-  
-  Future<void> _generarPdfRangoPedidos() async {
-    if (_idPedidoInicio == null || _idPedidoFin == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, selecciona el pedido inicial y final')),
-      );
-      return;
-    }
-    if (_idPedidoInicio! > _idPedidoFin!) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El pedido inicial no puede ser mayor que el final')),
-      );
-      return;
-    }
-    final db = await DatabaseHelper.instance.database;
-    final pedidos = await db.query(
-      'pedidos',
-      where: 'id BETWEEN ? AND ?',
-      whereArgs: [_idPedidoInicio, _idPedidoFin],
-      orderBy: 'id ASC',
-    );
-    if (pedidos.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se encontraron pedidos en ese rango')),
-      );
-      return;
-    }
-    
-    final pdf = pw.Document();
-    
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.letter,
-        build: (pw.Context context) {
-          return [
-            pw.Text('Reporte por Rango de Pedidos', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
-            pw.SizedBox(height: 15),
-            pw.Table.fromTextArray(
-              headers: ['Pedido', 'Cliente', 'Productos', 'Total', 'Fecha'],
-              data: pedidos.map((p) => [
-                p['numero_pedido']?.toString() ?? '',
-                p['cliente']?.toString() ?? '',
-                p['productos_json']?.toString() ?? '',
-                'L ${(p['total'] as num?)?.toStringAsFixed(2) ?? '0.00'}',
-                p['fecha']?.toString() ?? '',
-              ]).toList(),
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
-              cellStyle: const pw.TextStyle(fontSize: 10),
-            ),
-          ];
-        },
-      ),
-    );
-    
-    String nombre = 'Rango_Pedidos_${DateTime.now().millisecondsSinceEpoch}.pdf';
     await _guardarYCompartirPdf(pdf, nombre);
   }
 
@@ -2251,6 +2188,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       ]);
     }
 
+    double diferenciaTotal = sumaTotalPedidos - sumaTotalEntregado;
+
     final pdf = pw.Document();
     pdf.addPage(
       pw.MultiPage(
@@ -2303,14 +2242,49 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.end,
               children: [
-                pw.Text('Total Gral: ', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.grey700),
-                    borderRadius: pw.BorderRadius.circular(4),
-                  ),
-                  child: pw.Text('L. ${sumaTotalPedidos.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                // Total Pedido
+                pw.Row(
+                  children: [
+                    pw.Text('Total Pedido: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: PdfColors.grey700),
+                        borderRadius: pw.BorderRadius.circular(4),
+                      ),
+                      child: pw.Text('L. ${sumaTotalPedidos.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                pw.SizedBox(width: 8),
+                // Total Entregado
+                pw.Row(
+                  children: [
+                    pw.Text('Total Entregado: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: PdfColors.grey700),
+                        borderRadius: pw.BorderRadius.circular(4),
+                      ),
+                      child: pw.Text('L. ${sumaTotalEntregado.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                pw.SizedBox(width: 8),
+                // Diferencia
+                pw.Row(
+                  children: [
+                    pw.Text('Diferencia: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: PdfColors.grey700),
+                        borderRadius: pw.BorderRadius.circular(4),
+                      ),
+                      child: pw.Text('L. ${diferenciaTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -2551,76 +2525,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                           ],
                         );
                       },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 15),
-            Card(
-              elevation: 3,
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Reporte por Rango de Pedidos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 5),
-                    const Text('Selecciona el pedido inicial y final para agruparlos en un PDF.', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                    const SizedBox(height: 10),
-                    FutureBuilder<List<Map<String, dynamic>>>(
-                      future: DatabaseHelper.instance.database.then((db) => db.query('pedidos', orderBy: 'id ASC')),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData) return const CircularProgressIndicator();
-                        final pedidos = snapshot.data!;
-                        if (pedidos.isEmpty) {
-                          return const Text('No hay pedidos disponibles.', style: TextStyle(color: Colors.red, fontSize: 12));
-                        }
-                        return Column(
-                          children: [
-                            DropdownButtonFormField<int>(
-                              decoration: const InputDecoration(
-                                labelText: 'Pedido Inicial',
-                                border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              ),
-                              value: _idPedidoInicio,
-                              items: pedidos.map((p) {
-                                return DropdownMenuItem<int>(
-                                  value: p['id'] as int,
-                                  child: Text('${p['numero_pedido']} - ${p['cliente']}', overflow: TextOverflow.ellipsis),
-                                );
-                              }).toList(),
-                              onChanged: (val) => setState(() => _idPedidoInicio = val),
-                            ),
-                            const SizedBox(height: 10),
-                            DropdownButtonFormField<int>(
-                              decoration: const InputDecoration(
-                                labelText: 'Pedido Individual / Fin',
-                                border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              ),
-                              value: _idPedidoFin,
-                              items: pedidos.map((p) {
-                                return DropdownMenuItem<int>(
-                                  value: p['id'] as int,
-                                  child: Text('${p['numero_pedido']} - ${p['cliente']}', overflow: TextOverflow.ellipsis),
-                                );
-                              }).toList(),
-                              onChanged: (val) => setState(() => _idPedidoFin = val),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-                        onPressed: _generarPdfRangoPedidos,
-                        child: const Text('Exportar Rango de Pedidos'),
-                      ),
                     ),
                   ],
                 ),
