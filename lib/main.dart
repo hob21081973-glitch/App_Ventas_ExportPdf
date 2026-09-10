@@ -790,30 +790,30 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
 // ==========================================
 class VistaHistorialPedidos extends StatefulWidget {
   const VistaHistorialPedidos({super.key});
- 
+
   @override
   State<VistaHistorialPedidos> createState() => _VistaHistorialPedidosState();
 }
- 
+
 class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
   String _filtro = '';
- 
+
   @override
   void initState() {
     super.initState();
     changeNotifierPedidos.addListener(_recargar);
   }
- 
+
   @override
   void dispose() {
     changeNotifierPedidos.removeListener(_recargar);
     super.dispose();
   }
- 
+
   void _recargar() {
     if (mounted) setState(() {});
   }
- 
+
   Future<List<Map<String, dynamic>>> _obtenerPedidos() async {
     final db = await DatabaseHelper.instance.database;
     if (_filtro.isEmpty) {
@@ -827,14 +827,54 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       );
     }
   }
- 
+
   void _eliminarPedido(int id) async {
     final db = await DatabaseHelper.instance.database;
     await db.delete('pedidos', where: 'id = ?', whereArgs: [id]);
     changeNotifierPedidos.value++;
     setState(() {});
   }
- 
+
+  // Función para resetear todo el historial de pedidos con confirmación
+  void _confirmarReseteoHistorial() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reiniciar Historial'),
+        content: const Text(
+          '¿Estás seguro de que deseas eliminar todo el historial de pedidos? Esta acción no se puede deshacer y los nuevos pedidos comenzarán desde el Pedido #01.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('NO', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final db = await DatabaseHelper.instance.database;
+              await db.delete('pedidos');
+              
+              // Reiniciar el autoincrementable de la tabla pedidos en SQLite
+              try {
+                await db.rawExecute("DELETE FROM sqlite_sequence WHERE name='pedidos'");
+              } catch (_) {}
+
+              changeNotifierPedidos.value++;
+              setState(() {});
+              
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Historial de pedidos reseteado con éxito')),
+              );
+            },
+            child: const Text('SÍ', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _editarPedido(Map<String, dynamic> pedido) async {
     final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
     if (mainState == null) return;
@@ -908,7 +948,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       productosEdit,
     );
   }
- 
+
   // ==========================================
   // FUNCIÓN PARA GENERAR EL PDF INDIVIDUAL
   // ==========================================
@@ -934,7 +974,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     String prodStr = pedido['productos_json']?.toString() ?? '';
     List<String> items = prodStr.split(';');
     List<List<String>> filasProductos = [];
-    int conteoLineasProductos = 0; // Conteo real de ítems (líneas/productos diferentes)
+    int conteoLineasProductos = 0; 
      
     for (var item in items) {
       item = item.trim();
@@ -948,7 +988,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         nombreProd = item.replaceFirst(regExp, '').trim();
       }
 
-      // Limpiamos los corchetes del nombre para consultar el precio correctamente en la BD
       String nombreBusqueda = nombreProd;
       int bracketStart = nombreBusqueda.indexOf('[');
       int bracketEnd = nombreBusqueda.lastIndexOf(']');
@@ -956,7 +995,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         nombreBusqueda = nombreBusqueda.substring(0, bracketStart).trim();
       }
 
-      conteoLineasProductos++; // Incrementa por cada tipo de producto diferente
+      conteoLineasProductos++; 
       double precioUnitario = 0.0;
       String codigoProd = '';
       final resProd = await db.query(
@@ -970,7 +1009,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         codigoProd = resProd.first['codigo']?.toString() ?? '';
       }
 
-      // Agregar el código del producto entre corchetes antes del nombre si existe
       String nombreConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
 
       double valorTotalFila = precioUnitario * cantidad;
@@ -984,7 +1022,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
      
     double totalPedido = (pedido['total'] as num?)?.toDouble() ?? 0.0;
    
-    // Declaración correcta de variables faltantes (directorio y numeroPedidoFormateado)
     Directory? directorio;
     if (Platform.isAndroid) {
       final directories = await getExternalStorageDirectories(type: StorageDirectory.downloads);
@@ -1129,7 +1166,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         },
       ),
     );
- 
+
     try {
       String numPedLimpio = (pedido['numero_pedido']?.toString() ?? 'pedido').replaceAll('#', '').replaceAll(' ', '_');
       final ruta = '${directorio!.path}/Nota_$numPedLimpio.pdf';
@@ -1152,7 +1189,17 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Historial de Pedidos'),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Historial de Pedidos'),
+            IconButton(
+              icon: const Icon(Icons.delete_sweep, color: Colors.white),
+              tooltip: 'Resetear historial de pedidos',
+              onPressed: _confirmarReseteoHistorial,
+            ),
+          ],
+        ),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
