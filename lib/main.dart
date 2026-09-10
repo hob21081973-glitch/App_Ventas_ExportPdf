@@ -2267,7 +2267,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
                     pw.Text(
-                      "REPORTE GENERAL POR CLIENTE",
+                      "REPORTE GRAL POR CLIENTE",
                       style: pw.TextStyle(
                         fontSize: 14,
                         fontWeight: pw.FontWeight.bold,
