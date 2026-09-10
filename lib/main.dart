@@ -1687,7 +1687,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   DateTime? _fechaInicio;
   DateTime? _fechaFin;
   
-  // Variables y controladores para el Reporte General Por Cliente (por Pedido Específico)
+  // Variables y controladores para el Reporte Gral por Cliente
   int? _idPedidoSeleccionadoParaReporte;
   final TextEditingController _valorEntregadoController = TextEditingController();
   final TextEditingController _comentarioController = TextEditingController();
@@ -1748,8 +1748,12 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     
     final pdf = pw.Document();
     List<List<String>> filasReporte = [];
+    double totalGeneral = 0.0;
 
     for (var p in pedidos) {
+      double totalPedido = (p['total'] as num?)?.toDouble() ?? 0.0;
+      totalGeneral += totalPedido;
+
       String nombreClienteRaw = p['cliente']?.toString() ?? '';
       String codigoCliente = '';
       
@@ -1828,7 +1832,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         numeroPedidoFormateado,
         clienteConCodigo,
         productosTexto,
-        "L. ${(p['total'] as num?)?.toStringAsFixed(2) ?? '0.00'}",
+        "L. ${totalPedido.toStringAsFixed(2)}",
       ]);
     }
 
@@ -1884,7 +1888,22 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 ),
               ],
             ),
-            pw.SizedBox(height: 15),
+            pw.SizedBox(height: 10),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.end,
+              children: [
+                pw.Text('Total Gral: ', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey700),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.Text('L. ${totalGeneral.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 10),
             pw.Divider(thickness: 1, color: PdfColors.blue900),
             pw.SizedBox(height: 10),
             pw.Table.fromTextArray(
@@ -2165,8 +2184,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
 
   Future<void> _generarPdfReporteGeneralPorCliente() async {
     final db = await DatabaseHelper.instance.database;
-    
-    // Consultar TODOS los pedidos ordenados por ID ascendente para generar el reporte general completo
     final pedidos = await db.query('pedidos', orderBy: 'id ASC');
 
     if (pedidos.isEmpty) {
@@ -2178,6 +2195,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     }
 
     List<List<String>> filasReporteGeneralCliente = [];
+    double sumaTotalPedidos = 0.0;
+    double sumaTotalEntregado = 0.0;
 
     for (var p in pedidos) {
       String nombreClienteRaw = p['cliente']?.toString() ?? '';
@@ -2208,10 +2227,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       }
 
       double totalPedido = (p['total'] as num?)?.toDouble() ?? 0.0;
-      
-      // Consultar si este pedido específico tiene datos guardados en la tabla temporal o si tomamos por defecto
-      // Para simplificar y ajustarnos al requerimiento de llenar campo por pedido:
-      // Si el usuario seleccionó este pedido y llenó los campos, los usamos, de lo contrario valores por defecto.
+      sumaTotalPedidos += totalPedido;
+
       double valEntregado = totalPedido;
       String comentario = 'Entregado';
 
@@ -2223,13 +2240,14 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
           comentario = _comentarioController.text;
         }
       }
+      sumaTotalEntregado += valEntregado;
 
       filasReporteGeneralCliente.add([
         numPedRaw,
         clienteConCodigo,
         'L. ${totalPedido.toStringAsFixed(2)}',
         'L. ${valEntregado.toStringAsFixed(2)}',
-        comentario,
+        comentario.isEmpty ? '-' : comentario,
       ]);
     }
 
@@ -2269,7 +2287,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                     pw.Text(
                       "REPORTE GRAL POR CLIENTE",
                       style: pw.TextStyle(
-                        fontSize: 14,
+                        fontSize: 11,
                         fontWeight: pw.FontWeight.bold,
                       ),
                     ),
@@ -2281,7 +2299,22 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 ),
               ],
             ),
-            pw.SizedBox(height: 10),
+            pw.SizedBox(height: 8),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.end,
+              children: [
+                pw.Text('Total Gral: ', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey700),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.Text('L. ${sumaTotalPedidos.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 8),
             pw.Divider(thickness: 1, color: PdfColors.blue900),
             pw.SizedBox(height: 10),
             pw.Table.fromTextArray(
@@ -2417,7 +2450,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             ),
             const SizedBox(height: 15),
             // ========================================================
-            // NUEVA SECCIÓN: REPORTE GENERAL POR CLIENTE (CORREGIDA)
+            // SECCIÓN: REPORTE GRAL POR CLIENTE
             // ========================================================
             Card(
               elevation: 3,
@@ -2426,7 +2459,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Reporte General Por Cliente', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const Text('Reporte Gral por Cliente', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 5),
                     const Text('Selecciona un pedido para registrar su valor entregado y comentario.', style: TextStyle(fontSize: 12, color: Colors.grey)),
                     const SizedBox(height: 10),
@@ -2467,7 +2500,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                                 setState(() {
                                   _idPedidoSeleccionadoParaReporte = val;
                                   if (val != null) {
-                                    // Cargar el total de ese pedido por defecto en el campo
                                     final pedidoEncontrado = pedidos.firstWhere((p) => p['id'] == val);
                                     double total = (pedidoEncontrado['total'] as num?)?.toDouble() ?? 0.0;
                                     _valorEntregadoController.text = total.toStringAsFixed(2);
@@ -2513,7 +2545,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
                                 onPressed: _generarPdfReporteGeneralPorCliente,
                                 icon: const Icon(Icons.picture_as_pdf),
-                                label: const Text('Exportar Reporte General Por Cliente'),
+                                label: const Text('Exportar Reporte Gral por Cliente'),
                               ),
                             ),
                           ],
