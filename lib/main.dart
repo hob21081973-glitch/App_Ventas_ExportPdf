@@ -836,6 +836,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
   }
 
   // Función para resetear todo el historial de pedidos con confirmación
+  // Función para resetear todo el historial de pedidos con confirmación
   void _confirmarReseteoHistorial() {
     showDialog(
       context: context,
@@ -857,7 +858,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
               
               // Reiniciar el autoincrementable de la tabla pedidos en SQLite
               try {
-                await db.rawExecute("DELETE FROM sqlite_sequence WHERE name='pedidos'");
+                await db.execute("DELETE FROM sqlite_sequence WHERE name='pedidos'");
               } catch (_) {}
 
               changeNotifierPedidos.value++;
@@ -874,7 +875,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       ),
     );
   }
-
   void _editarPedido(Map<String, dynamic> pedido) async {
     final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
     if (mainState == null) return;
