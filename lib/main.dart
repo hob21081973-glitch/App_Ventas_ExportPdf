@@ -1410,7 +1410,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         foregroundColor: Colors.white,
       ),
       body: Padding(
-        padding: const pw.EdgeInsets.all(12.0),
+        padding: const EdgeInsets.all(12.0),
         child: Column(
           children: [
             Row(
@@ -1480,12 +1480,12 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
 
                       return Container(
                         width: double.infinity,
-                        margin: const pw.EdgeInsets.symmetric(vertical: 6),
+                        margin: const EdgeInsets.symmetric(vertical: 6),
                         child: Card(
                           elevation: 3,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           child: Padding(
-                            padding: const pw.EdgeInsets.all(16.0),
+                            padding: const EdgeInsets.all(16.0),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -1542,7 +1542,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                                 ),
                                 const SizedBox(height: 4),
                                 ...listaProductos.map((prod) => Padding(
-                                  padding: const pw.EdgeInsets.only(bottom: 2),
+                                  padding: const EdgeInsets.only(bottom: 2),
                                   child: Text(
                                     '• $prod',
                                     style: const TextStyle(fontSize: 13),
@@ -1582,6 +1582,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     );
   }
 }
+
 // ==========================================
 // 3. PESTAÑA: GESTIÓN DE CLIENTES
 // ==========================================
