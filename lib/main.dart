@@ -2224,7 +2224,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       return;
     }
 
-    // Estructura para almacenar la cantidad y el valor, agrupados por la combinación de Producto + Comentario
     Map<String, int> conteoProductos = {};
     Map<String, double> valorTotalProductos = {};
     Map<String, String> comentariosProductos = {};
@@ -2246,7 +2245,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
           itemLimpio = item.replaceFirst(regExp, '').trim();
         }
         
-        // Extraer comentario si existe entre corchetes [...]
         String detalleComentario = '';
         int bracketStart = itemLimpio.indexOf('[');
         int bracketEnd = itemLimpio.lastIndexOf(']');
@@ -2254,11 +2252,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         
         if (bracketStart != -1 && bracketEnd != -1 && bracketEnd > bracketStart) {
           detalleComentario = itemLimpio.substring(bracketStart + 1, bracketEnd).trim();
-          // Dejar el nombre del producto limpio antes del corchete o procesarlo adecuadamente
           nombreProd = itemLimpio.substring(0, bracketStart).trim();
         }
 
-        // Llave única para agrupar considerando el comentario si lo tiene
         String claveAgrupacion = detalleComentario.isNotEmpty ? '$nombreProd|$detalleComentario' : nombreProd;
 
         conteoProductos[claveAgrupacion] = (conteoProductos[claveAgrupacion] ?? 0) + cantidad;
@@ -2436,6 +2432,201 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     String nombre = 'Reporte_Productos_${DateTime.now().millisecondsSinceEpoch}.pdf';
     await _guardarYCompartirPdf(pdf, nombre);
   }
+
+  Future<void> _generarPdfReporteGeneralPorCliente() async {
+    final db = await DatabaseHelper.instance.database;
+    final pedidos = await db.query('pedidos', orderBy: 'id ASC');
+    if (pedidos.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay pedidos registrados en el sistema')),
+      );
+      return;
+    }
+    List<List<String>> filasReporteGeneralCliente = [];
+    double sumaTotalPedidos = 0.0;
+    double sumaTotalEntregado = 0.0;
+    for (var p in pedidos) {
+      String nombreClienteRaw = p['cliente']?.toString() ?? '';
+      String codigoCliente = '';
+      
+      if (nombreClienteRaw.isNotEmpty) {
+        final resCliente = await db.query(
+          'clientes',
+          where: 'nombre = ?',
+          whereArgs: [nombreClienteRaw],
+          limit: 1,
+        );
+        if (resCliente.isNotEmpty) {
+          codigoCliente = resCliente.first['codigo']?.toString() ?? '';
+        }
+      }
+      
+      String clienteConCodigo = codigoCliente.isNotEmpty 
+          ? '[$codigoCliente] $nombreClienteRaw' 
+          : nombreClienteRaw;
+      int idPedido = p['id'] as int;
+      String numPedRaw = p['numero_pedido']?.toString() ?? '';
+      if (numPedRaw.isEmpty) {
+        numPedRaw = 'Pedido #$idPedido';
+      } else if (!numPedRaw.toLowerCase().contains('pedido')) {
+        numPedRaw = 'Pedido $numPedRaw';
+      }
+      double totalPedido = (p['total'] as num?)?.toDouble() ?? 0.0;
+      sumaTotalPedidos += totalPedido;
+      double valEntregado = totalPedido;
+      String comentario = 'Entregado';
+      if (_idPedidoSeleccionadoParaReporte == idPedido) {
+        if (_valorEntregadoController.text.isNotEmpty) {
+          valEntregado = double.tryParse(_valorEntregadoController.text) ?? totalPedido;
+        }
+        if (_comentarioController.text.isNotEmpty) {
+          comentario = _comentarioController.text;
+        }
+      }
+      sumaTotalEntregado += valEntregado;
+      filasReporteGeneralCliente.add([
+        numPedRaw,
+        clienteConCodigo,
+        'L. ${totalPedido.toStringAsFixed(2)}',
+        'L. ${valEntregado.toStringAsFixed(2)}',
+        comentario.isEmpty ? '-' : comentario,
+      ]);
+    }
+    double diferenciaTotal = sumaTotalPedidos - sumaTotalEntregado;
+    final pdf = pw.Document();
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.all(24),
+        build: (pw.Context context) {
+          return [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      "D   I   C   O   S   M   O",
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue900,
+                      ),
+                    ),
+                    pw.Text(
+                      "PRODUCTOS CHAMER MEDICAMENTOS UTILES ESCOLARES NOVEDADES Y MAS",
+                      style: const pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      "REPORTE GRAL POR CLIENTE",
+                      style: pw.TextStyle(
+                        fontSize: 11,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.Text(
+                      "Fecha: ${DateFormat('dd/MM/yy').format(DateTime.now())}",
+                      style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 8),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.end,
+              children: [
+                pw.Row(
+                  children: [
+                    pw.Text('Total Pedido: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: PdfColors.grey700),
+                        borderRadius: pw.BorderRadius.circular(4),
+                      ),
+                      child: pw.Text('L. ${sumaTotalPedidos.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                pw.SizedBox(width: 8),
+                pw.Row(
+                  children: [
+                    pw.Text('Total Entregado: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: PdfColors.grey700),
+                        borderRadius: pw.BorderRadius.circular(4),
+                      ),
+                      child: pw.Text('L. ${sumaTotalEntregado.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                pw.SizedBox(width: 8),
+                pw.Row(
+                  children: [
+                    pw.Text('Diferencia: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: PdfColors.grey700),
+                        borderRadius: pw.BorderRadius.circular(4),
+                      ),
+                      child: pw.Text('L. ${diferenciaTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 8),
+            pw.Divider(thickness: 1, color: PdfColors.blue900),
+            pw.SizedBox(height: 10),
+            pw.Table.fromTextArray(
+              headers: ['Pedido #', 'Cliente', 'Total Pedido', 'Total Entregado', 'Comentario'],
+              data: filasReporteGeneralCliente,
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white,
+                fontSize: 10,
+              ),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.blue900,
+              ),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              cellPadding: const pw.EdgeInsets.all(6),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(1.5),
+                1: const pw.FlexColumnWidth(2.5),
+                2: const pw.FlexColumnWidth(1.5),
+                3: const pw.FlexColumnWidth(1.5),
+                4: const pw.FlexColumnWidth(2.5),
+              },
+              cellAlignments: {
+                0: pw.Alignment.center,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.centerRight,
+                3: pw.Alignment.centerRight,
+                4: pw.Alignment.centerLeft,
+              },
+            ),
+          ];
+        },
+      ),
+    );
+    String nombre = 'Reporte_General_Por_Cliente_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    await _guardarYCompartirPdf(pdf, nombre);
+  }
   
   @override
   Widget build(BuildContext context) {
@@ -2523,7 +2714,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               child: ListTile(
                 leading: const Icon(Icons.bar_chart, color: Colors.indigo, size: 36),
                 title: const Text('Reporte por Productos Vendidos', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Exporta el total acumulado de unidades vendidas por cada producto.'),
+                subtitle: const Text('Exporta el total acumulado de unidades vendidas por cada producto con sus comentarios.'),
                 trailing: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
                   onPressed: _generarPdfProductosVendidos,
