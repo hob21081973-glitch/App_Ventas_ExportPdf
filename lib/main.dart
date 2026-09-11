@@ -1092,7 +1092,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
           ),
           if (detalleComentario.isNotEmpty)
             pw.Padding(
-              padding: pw.EdgeInsets.only(left: codigoProd.isNotEmpty ? (codigoProd.length * 6.5) + 12.0 : 0.0, top: 2.0),
+              padding: pw.EdgeInsets.only(left: codigoProd.isNotEmpty ? (codigoProd.length * 6.0) + 12.0 : 0.0, top: 2.0),
               child: pw.Text(
                 detalleComentario,
                 style: const pw.TextStyle(
