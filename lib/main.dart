@@ -672,7 +672,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
         ],
       ),
       body: Padding(
-        padding: const pw.EdgeInsets.all(12.0),
+        padding: const EdgeInsets.all(12.0),
         child: Column(
           children: [
             Row(
@@ -738,7 +738,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                             ? item['comentario']
                             : '';
                         return Card(
-                          margin: const pw.EdgeInsets.symmetric(vertical: 4),
+                          margin: const EdgeInsets.symmetric(vertical: 4),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),
                             child: Row(
@@ -1654,7 +1654,7 @@ class _VistaGestionClientesState extends State<VistaGestionClientes> {
                   itemBuilder: (context, index) {
                     final c = clientes[index];
                     return Card(
-                      margin: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       child: ListTile(
                         title: Text(c['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text('Código: ${c['codigo']} | Tel: ${c['telefono']}'),
@@ -1748,7 +1748,7 @@ class _VistaGestionProductosState extends State<VistaGestionProductos> {
                   itemBuilder: (context, index) {
                     final p = productos[index];
                     return Card(
-                      margin: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       child: ListTile(
                         title: Text(p['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text('Código: ${p['codigo']}'),
