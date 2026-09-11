@@ -131,23 +131,32 @@ class DatabaseHelper {
 // ==========================================
 // MENÚ PRINCIPAL CON PESTAÑAS
 // ==========================================
-class MenuPrincipal extends StatefulWidget {
-  const MenuPrincipal({super.key});
-  @override
-  State<MenuPrincipal> createState() => MenuPrincipalState();
-}
 class MenuPrincipalState extends State<MenuPrincipal> {
   int _indiceActual = 0;
   
+  // 1. Declarar el controlador de páginas
+  late final PageController _pageController;
+
   int? editandoPedidoId;
   String? editandoNumeroPedidoFijo;
   String? clienteEnCurso;
   List<Map<String, dynamic>> productosEnCurso = [];
+
   @override
   void initState() {
     super.initState();
+    // 2. Inicializar el PageController con la página inicial
+    _pageController = PageController(initialPage: _indiceActual);
     _cargarBorradorLocal();
   }
+
+  @override
+  void dispose() {
+    // 3. Liberar el controlador al cerrar el widget
+    _pageController.dispose();
+    super.dispose();
+  }
+
   Future<void> _guardarBorradorLocal() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('editandoPedidoId', editandoPedidoId ?? -1);
@@ -155,6 +164,7 @@ class MenuPrincipalState extends State<MenuPrincipal> {
     await prefs.setString('clienteEnCurso', clienteEnCurso ?? '');
     await prefs.setString('productosEnCurso', jsonEncode(productosEnCurso));
   }
+
   Future<void> _cargarBorradorLocal() async {
     final prefs = await SharedPreferences.getInstance();
     int? idTemp = prefs.getInt('editandoPedidoId');
@@ -178,6 +188,7 @@ class MenuPrincipalState extends State<MenuPrincipal> {
     }
     setState(() {});
   }
+
   void cargarPedidoParaEditar(int id, String numeroPedido, String cliente, List<Map<String, dynamic>> productos) {
     setState(() {
       editandoPedidoId = id;
@@ -186,8 +197,11 @@ class MenuPrincipalState extends State<MenuPrincipal> {
       productosEnCurso = List.from(productos);
       _indiceActual = 0; 
     });
+    // Si estás editando y quieres que salte automáticamente a la pestaña "Crear" (índice 0):
+    _pageController.jumpToPage(0);
     _guardarBorradorLocal();
   }
+
   void limpiarPedidoEnCurso() async {
     setState(() {
       editandoPedidoId = null;
@@ -198,6 +212,7 @@ class MenuPrincipalState extends State<MenuPrincipal> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
   }
+
   @override
   Widget build(BuildContext context) {
     final List<Widget> pantallas = [
@@ -212,17 +227,32 @@ class MenuPrincipalState extends State<MenuPrincipal> {
       const VistaResumenProductos(),
       const VistaExportarPdf(),
     ];
+
     return Scaffold(
-      body: IndexedStack(
-        index: _indiceActual,
+      // 4. Reemplazamos el IndexedStack por PageView para permitir gestos de deslizamiento
+      body: PageView(
+        controller: _pageController,
         children: pantallas,
+        onPageChanged: (index) {
+          setState(() {
+            _indiceActual = index; // Actualiza el índice cuando el usuario desliza la pantalla
+          });
+        },
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _indiceActual,
         type: BottomNavigationBarType.fixed,
         selectedItemColor: Colors.indigo,
         unselectedItemColor: Colors.grey,
-        onTap: (index) => setState(() => _indiceActual = index),
+        onTap: (index) {
+          setState(() => _indiceActual = index);
+          // 5. Animamos la transición de la página cuando el usuario toca un botón inferior
+          _pageController.animateToPage(
+            index,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.add_shopping_cart), label: 'Crear'),
           BottomNavigationBarItem(icon: Icon(Icons.history), label: 'Historial'),
