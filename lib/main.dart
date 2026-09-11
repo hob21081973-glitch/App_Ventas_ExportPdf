@@ -1917,7 +1917,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   int? _idPedidoSeleccionadoParaReporte;
   final TextEditingController _valorEntregadoController = TextEditingController();
   final TextEditingController _comentarioController = TextEditingController();
-
+  
   @override
   void dispose() {
     _valorEntregadoController.dispose();
@@ -1939,6 +1939,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       final ruta = '${directorio!.path}/$nombreArchivo';
       final archivo = File(ruta);
       await archivo.writeAsBytes(await pdf.save());
+      
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('¡Guardado en Descargas: $nombreArchivo')),
@@ -1963,6 +1964,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       args = [inicioStr, finStr];
     }
     query += ' ORDER BY id DESC';
+    
     final pedidos = await db.rawQuery(query, args);
     if (pedidos.isEmpty) {
       if (!mounted) return;
@@ -2034,17 +2036,21 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             }
             String prodConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
             
+            // CORRECCIÓN: Productos y comentarios agrupados para no generar tanto espacio vacío
             widgetsProductosPedido.add(
-              pw.Text('[   ] $prodConCodigo (x$cantidad)', style: const pw.TextStyle(fontSize: 9)),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                mainAxisSize: pw.MainAxisSize.min,
+                children: [
+                  pw.Text('[    ] $prodConCodigo (x$cantidad)', style: const pw.TextStyle(fontSize: 9)),
+                  if (detalleComentario.isNotEmpty)
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.only(left: 10, top: 1, bottom: 1),
+                      child: pw.Text(detalleComentario, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                    ),
+                ],
+              ),
             );
-            if (detalleComentario.isNotEmpty) {
-              widgetsProductosPedido.add(
-                pw.Padding(
-                  padding: const pw.EdgeInsets.only(left: 10, bottom: 2),
-                  child: pw.Text(detalleComentario, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
-                ),
-              );
-            }
           }
         }
       } catch (_) {
@@ -2052,12 +2058,14 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
           pw.Text(p['productos_json']?.toString() ?? '', style: const pw.TextStyle(fontSize: 9)),
         );
       }
+      
       String numPedRaw = p['numero_pedido']?.toString() ?? '';
       if (numPedRaw.isEmpty) {
         numPedRaw = p['id']?.toString() ?? '';
       }
       String numLimpio = numPedRaw.replaceAll('Pedido', '').replaceAll('#', '').trim();
       String numeroPedidoFormateado = 'Pedido $numLimpio';
+      
       filasReporteWidgets.add([
         pw.Text(numeroPedidoFormateado, style: const pw.TextStyle(fontSize: 9)),
         pw.Text(clienteConCodigo, style: const pw.TextStyle(fontSize: 9)),
@@ -2068,6 +2076,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         pw.Text("L. ${totalPedido.toStringAsFixed(2)}", style: const pw.TextStyle(fontSize: 9)),
       ]);
     }
+    
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
@@ -2151,19 +2160,19 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   decoration: const pw.BoxDecoration(color: PdfColors.blue900),
                   children: [
                     pw.Padding(
-                      padding: const pw.EdgeInsets.all(6),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: pw.Text('Pedido', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10), textAlign: pw.TextAlign.center),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.all(6),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: pw.Text('Nombre Cliente', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10)),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.all(6),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: pw.Text('Productos', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10)),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.all(6),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: pw.Text('Valor Total', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10), textAlign: pw.TextAlign.right),
                     ),
                   ],
@@ -2171,20 +2180,21 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 for (var fila in filasReporteWidgets)
                   pw.TableRow(
                     children: [
+                      // CORRECCIÓN: Padding vertical reducido a 3
                       pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         child: pw.Align(alignment: pw.Alignment.center, child: fila[0]),
                       ),
                       pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         child: fila[1],
                       ),
                       pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         child: fila[2],
                       ),
                       pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         child: pw.Align(alignment: pw.Alignment.centerRight, child: fila[3]),
                       ),
                     ],
@@ -2220,11 +2230,11 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       );
       return;
     }
-
+    
     Map<String, int> conteoProductos = {};
     Map<String, double> valorTotalProductos = {};
     Map<String, String> comentariosProductos = {};
-
+    
     for (var pedido in pedidos) {
       String productosJson = pedido['productos_json']?.toString() ?? '';
       List<String> items = productosJson.split(';');
@@ -2251,9 +2261,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
           detalleComentario = itemLimpio.substring(bracketStart + 1, bracketEnd).trim();
           nombreProd = itemLimpio.substring(0, bracketStart).trim();
         }
-
         String claveAgrupacion = detalleComentario.isNotEmpty ? '$nombreProd|$detalleComentario' : nombreProd;
-
         conteoProductos[claveAgrupacion] = (conteoProductos[claveAgrupacion] ?? 0) + cantidad;
         
         final resProd = await db.query(
@@ -2271,7 +2279,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         comentariosProductos[claveAgrupacion] = detalleComentario;
       }
     }
-
+    
     final listaOrdenada = conteoProductos.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
       
@@ -2284,8 +2292,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       
       String nombreProd = clave.contains('|') ? clave.split('|')[0] : clave;
       String comentario = comentariosProductos[clave] ?? '';
-
       String codigoProd = '';
+      
       final resProd = await db.query(
         'productos',
         where: 'nombre = ?',
@@ -2297,11 +2305,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       }
       
       String productoConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
-
       List<pw.Widget> widgetsContenido = [
         pw.Text(productoConCodigo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
       ];
-
       if (comentario.isNotEmpty) {
         widgetsContenido.add(
           pw.Padding(
@@ -2310,7 +2316,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
           ),
         );
       }
-
       filasProductosWidgets.add([
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -2389,15 +2394,15 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   decoration: const pw.BoxDecoration(color: PdfColors.blue900),
                   children: [
                     pw.Padding(
-                      padding: const pw.EdgeInsets.all(6),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: pw.Text('NOMBRE DEL PRODUCTO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10)),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.all(6),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: pw.Text('CANTIDAD', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10), textAlign: pw.TextAlign.center),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.all(6),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: pw.Text('VALOR TOTAL', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10), textAlign: pw.TextAlign.right),
                     ),
                   ],
@@ -2406,15 +2411,15 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   pw.TableRow(
                     children: [
                       pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         child: fila[0],
                       ),
                       pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         child: pw.Align(alignment: pw.Alignment.center, child: fila[1]),
                       ),
                       pw.Padding(
-                        padding: const pw.EdgeInsets.all(6),
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         child: pw.Align(alignment: pw.Alignment.centerRight, child: fila[2]),
                       ),
                     ],
@@ -2429,7 +2434,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     String nombre = 'Reporte_Productos_${DateTime.now().millisecondsSinceEpoch}.pdf';
     await _guardarYCompartirPdf(pdf, nombre);
   }
-
+  
   Future<void> _generarPdfReporteGeneralPorCliente() async {
     final db = await DatabaseHelper.instance.database;
     final pedidos = await db.query('pedidos', orderBy: 'id ASC');
@@ -2440,9 +2445,11 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       );
       return;
     }
+    
     List<List<String>> filasReporteGeneralCliente = [];
     double sumaTotalPedidos = 0.0;
     double sumaTotalEntregado = 0.0;
+    
     for (var p in pedidos) {
       String nombreClienteRaw = p['cliente']?.toString() ?? '';
       String codigoCliente = '';
@@ -2469,10 +2476,12 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       } else if (!numPedRaw.toLowerCase().contains('pedido')) {
         numPedRaw = 'Pedido $numPedRaw';
       }
+      
       double totalPedido = (p['total'] as num?)?.toDouble() ?? 0.0;
       sumaTotalPedidos += totalPedido;
       double valEntregado = totalPedido;
       String comentario = 'Entregado';
+      
       if (_idPedidoSeleccionadoParaReporte == idPedido) {
         if (_valorEntregadoController.text.isNotEmpty) {
           valEntregado = double.tryParse(_valorEntregadoController.text) ?? totalPedido;
@@ -2490,8 +2499,10 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         comentario.isEmpty ? '-' : comentario,
       ]);
     }
+    
     double diferenciaTotal = sumaTotalPedidos - sumaTotalEntregado;
     final pdf = pw.Document();
+    
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
@@ -2601,7 +2612,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 color: PdfColors.blue900,
               ),
               cellStyle: const pw.TextStyle(fontSize: 9),
-              cellPadding: const pw.EdgeInsets.all(6),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               columnWidths: {
                 0: const pw.FlexColumnWidth(1.5),
                 1: const pw.FlexColumnWidth(2.5),
