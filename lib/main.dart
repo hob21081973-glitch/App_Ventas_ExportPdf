@@ -10,22 +10,17 @@ import 'dart:convert';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-
 // Notificador global para actualizar datos en tiempo real entre pestañas
 final ValueNotifier<int> changeNotifierPedidos = ValueNotifier<int>(0); 
-
 // URLs de Google Sheets (Reemplaza con tus enlaces CSV publicados)
 const String urlClientesCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=0&single=true&output=csv';
 const String urlProductosCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=1903712481&single=true&output=csv';
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const AppVentasExportPdf());
 }
-
 class AppVentasExportPdf extends StatelessWidget {
   const AppVentasExportPdf({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -36,26 +31,21 @@ class AppVentasExportPdf extends StatelessWidget {
     );
   }
 }
-
 // ==========================================
 // BASE DE DATOS LOCAL (SQLITE)
 // ==========================================
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
-
   DatabaseHelper._init();
-
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB('ventas_app.db');
     return _database!;
   }
-
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = '$dbPath/$filePath';
-
     return await openDatabase(
       path,
       version: 2,
@@ -63,7 +53,6 @@ class DatabaseHelper {
       onUpgrade: _onUpgradeDB,
     );
   }
-
   Future _createDB(Database db, int version) async {
     await db.execute('''
       CREATE TABLE clientes (
@@ -72,7 +61,6 @@ class DatabaseHelper {
         telefono TEXT
       )
     ''');
-
     await db.execute('''
       CREATE TABLE productos (
         codigo TEXT PRIMARY KEY,
@@ -80,7 +68,6 @@ class DatabaseHelper {
         precio REAL
       )
     ''');
-
     await db.execute('''
       CREATE TABLE pedidos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,7 +80,6 @@ class DatabaseHelper {
       )
     ''');
   }
-
   Future _onUpgradeDB(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       try {
@@ -101,11 +87,9 @@ class DatabaseHelper {
       } catch (_) {}
     }
   }
-
   Future<void> sincronizarClientesDesdeCSV(String csvData) async {
     final db = await instance.database;
     List<String> lineas = csvData.split('\n');
-
     await db.transaction((txn) async {
       await txn.delete('clientes');
       for (int i = 1; i < lineas.length; i++) {
@@ -122,11 +106,9 @@ class DatabaseHelper {
       }
     });
   }
-
   Future<void> sincronizarProductosDesdeCSV(String csvData) async {
     final db = await instance.database;
     List<String> lineas = csvData.split('\n');
-
     await db.transaction((txn) async {
       await txn.delete('productos');
       for (int i = 1; i < lineas.length; i++) {
@@ -136,7 +118,6 @@ class DatabaseHelper {
         if (cols.length >= 3) {
           String precioStr = cols[2].replaceAll('L', '').replaceAll(',', '').replaceAll('"', '').trim();
           double precio = double.tryParse(precioStr) ?? 0.0;
-
           await txn.insert('productos', {
             'codigo': cols[0].replaceAll('"', '').trim(),
             'nombre': cols[1].replaceAll('"', '').trim(),
@@ -147,17 +128,14 @@ class DatabaseHelper {
     });
   }
 }
-
 // ==========================================
 // MENÚ PRINCIPAL CON PESTAÑAS
 // ==========================================
 class MenuPrincipal extends StatefulWidget {
   const MenuPrincipal({super.key});
-
   @override
   State<MenuPrincipal> createState() => MenuPrincipalState();
 }
-
 class MenuPrincipalState extends State<MenuPrincipal> {
   int _indiceActual = 0;
   
@@ -165,13 +143,11 @@ class MenuPrincipalState extends State<MenuPrincipal> {
   String? editandoNumeroPedidoFijo;
   String? clienteEnCurso;
   List<Map<String, dynamic>> productosEnCurso = [];
-
   @override
   void initState() {
     super.initState();
     _cargarBorradorLocal();
   }
-
   Future<void> _guardarBorradorLocal() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('editandoPedidoId', editandoPedidoId ?? -1);
@@ -179,7 +155,6 @@ class MenuPrincipalState extends State<MenuPrincipal> {
     await prefs.setString('clienteEnCurso', clienteEnCurso ?? '');
     await prefs.setString('productosEnCurso', jsonEncode(productosEnCurso));
   }
-
   Future<void> _cargarBorradorLocal() async {
     final prefs = await SharedPreferences.getInstance();
     int? idTemp = prefs.getInt('editandoPedidoId');
@@ -203,7 +178,6 @@ class MenuPrincipalState extends State<MenuPrincipal> {
     }
     setState(() {});
   }
-
   void cargarPedidoParaEditar(int id, String numeroPedido, String cliente, List<Map<String, dynamic>> productos) {
     setState(() {
       editandoPedidoId = id;
@@ -214,7 +188,6 @@ class MenuPrincipalState extends State<MenuPrincipal> {
     });
     _guardarBorradorLocal();
   }
-
   void limpiarPedidoEnCurso() async {
     setState(() {
       editandoPedidoId = null;
@@ -225,7 +198,6 @@ class MenuPrincipalState extends State<MenuPrincipal> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
   }
-
   @override
   Widget build(BuildContext context) {
     final List<Widget> pantallas = [
@@ -240,7 +212,6 @@ class MenuPrincipalState extends State<MenuPrincipal> {
       const VistaResumenProductos(),
       const VistaExportarPdf(),
     ];
-
     return Scaffold(
       body: IndexedStack(
         index: _indiceActual,
@@ -265,20 +236,16 @@ class MenuPrincipalState extends State<MenuPrincipal> {
     );
   }
 }
-
 // ==========================================
 // 1. PESTAÑA: CREAR PEDIDO
 // ==========================================
 class VistaCrearPedido extends StatefulWidget {
   final VoidCallback onPedidoGuardado;
   final VoidCallback onCambioDato;
-
   const VistaCrearPedido({super.key, required this.onPedidoGuardado, required this.onCambioDato});
-
   @override
   State<VistaCrearPedido> createState() => _VistaCrearPedidoState();
 }
-
 class _VistaCrearPedidoState extends State<VistaCrearPedido> {
   Future<int> _obtenerSiguienteNumeroPedido() async {
     final db = await DatabaseHelper.instance.database;
@@ -286,7 +253,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
     int count = Sqflite.firstIntValue(resultado) ?? 0;
     return (count % 99) + 1;
   }
-
   void _guardarPedido() async {
     final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
     if (mainState?.clienteEnCurso == null) {
@@ -301,7 +267,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
       );
       return;
     }
-
     String numPedidoStr;
     if (mainState.editandoNumeroPedidoFijo != null) {
       numPedidoStr = mainState.editandoNumeroPedidoFijo!;
@@ -309,7 +274,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
       int numSeq = await _obtenerSiguienteNumeroPedido();
       numPedidoStr = 'Pedido #${numSeq.toString().padLeft(2, '0')}';
     }
-
     double total = mainState.productosEnCurso.fold<double>(
       0.0, 
       (sum, item) => sum + ((item['precio'] as num).toDouble() * (item['cantidad'] as num).toDouble())
@@ -322,7 +286,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
           : '';
       return "${p['nombre']}$com (x${p['cantidad']})";
     }).join('; ');
-
     final db = await DatabaseHelper.instance.database;
     
     if (mainState.editandoPedidoId != null) {
@@ -342,7 +305,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
         'grupo': '',
       });
     }
-
     widget.onPedidoGuardado();
     changeNotifierPedidos.value++;
     setState(() {});
@@ -352,7 +314,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
       SnackBar(content: Text('¡$numPedidoStr Guardado con éxito!')),
     );
   }
-
   void _abrirBuscadorClientes() {
     showDialog(
       context: context,
@@ -438,7 +399,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
       },
     );
   }
-
   void _abrirBuscadorProductos() {
     showDialog(
       context: context,
@@ -536,7 +496,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
       },
     );
   }
-
   void _pedirComentario(int index) {
     final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
     if (mainState == null) return;
@@ -565,7 +524,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
       ),
     );
   }
-
   void _mostrarDialogoGestionProducto(int index) {
     final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
     if (mainState == null) return;
@@ -650,7 +608,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
       ),
     );
   }
-
   @override
   Widget build(BuildContext context) {
     final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
@@ -659,7 +616,6 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
       0.0, 
       (sum, item) => sum + ((item['precio'] as num).toDouble() * (item['cantidad'] as num).toDouble())
     ) ?? 0.0;
-
     return Scaffold(
       appBar: AppBar(
         title: Text(estaEditando ? 'Editando ${mainState?.editandoNumeroPedidoFijo}' : 'Crear Pedido'),
@@ -799,37 +755,30 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
     );
   }
 }
-
 // ==========================================
 // 2. PESTAÑA: HISTORIAL DE PEDIDOS
 // ==========================================
 class VistaHistorialPedidos extends StatefulWidget {
   const VistaHistorialPedidos({super.key});
-
   @override
   State<VistaHistorialPedidos> createState() => _VistaHistorialPedidosState();
 }
-
 class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
   String _filtro = '';
   bool _mostrarArchivados = false;
-
   @override
   void initState() {
     super.initState();
     changeNotifierPedidos.addListener(_recargar);
   }
-
   @override
   void dispose() {
     changeNotifierPedidos.removeListener(_recargar);
     super.dispose();
   }
-
   void _recargar() {
     if (mounted) setState(() {});
   }
-
   Future<List<Map<String, dynamic>>> _obtenerPedidos() async {
     final db = await DatabaseHelper.instance.database;
     String condGrupo = _mostrarArchivados ? "grupo != ''" : "grupo = ''";
@@ -845,14 +794,12 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       );
     }
   }
-
   void _eliminarPedido(int id) async {
     final db = await DatabaseHelper.instance.database;
     await db.delete('pedidos', where: 'id = ?', whereArgs: [id]);
     changeNotifierPedidos.value++;
     setState(() {});
   }
-
   void _confirmarReseteoHistorial() {
     showDialog(
       context: context,
@@ -889,7 +836,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       ),
     );
   }
-
   void _mostrarDialogoAgruparPedidos() async {
     final db = await DatabaseHelper.instance.database;
     final pedidosActivos = await db.query('pedidos', where: "grupo = ''", orderBy: 'id ASC');
@@ -901,10 +847,8 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       );
       return;
     }
-
     Set<int> seleccionadosIds = {};
     TextEditingController nombreGrupoController = TextEditingController(text: 'Pedidos Semana 01');
-
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -935,7 +879,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                       String cli = p['cliente']?.toString() ?? 'Cliente';
                       double tot = (p['total'] as num?)?.toDouble() ?? 0.0;
                       bool isSelected = seleccionadosIds.contains(id);
-
                       return CheckboxListTile(
                         dense: true,
                         title: Text('$numP - $cli', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
@@ -973,11 +916,9 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                 }
                 String nombreGrupo = nombreGrupoController.text.trim();
                 if (nombreGrupo.isEmpty) nombreGrupo = 'Grupo de Pedidos';
-
                 for (int id in seleccionadosIds) {
                   await db.update('pedidos', {'grupo': nombreGrupo}, where: 'id = ?', whereArgs: [id]);
                 }
-
                 if (!mounted) return;
                 Navigator.pop(context);
                 changeNotifierPedidos.value++;
@@ -993,7 +934,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       ),
     );
   }
-
   void _editarPedido(Map<String, dynamic> pedido) async {
     final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
     if (mainState == null) return;
@@ -1067,7 +1007,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       productosEdit,
     );
   }
-
   Future<void> _exportarPdfPedidoIndividual(Map<String, dynamic> pedido) async {
     final pdf = pw.Document();
     final db = await DatabaseHelper.instance.database;
@@ -1351,7 +1290,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         },
       ),
     );
-
     try {
       String numPedLimpio = (pedido['numero_pedido']?.toString() ?? 'pedido').replaceAll('#', '').replaceAll(' ', '_');
       final ruta = '${directorio!.path}/Nota_$numPedLimpio.pdf';
@@ -1369,7 +1307,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       );
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1472,7 +1409,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                           .map((prod) => prod.trim())
                           .where((prod) => prod.isNotEmpty)
                           .toList();
-
                       return Container(
                         width: double.infinity,
                         margin: const EdgeInsets.symmetric(vertical: 6),
@@ -1577,20 +1513,16 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     );
   }
 }
-
 // ==========================================
 // 3. PESTAÑA: GESTIÓN DE CLIENTES
 // ==========================================
 class VistaGestionClientes extends StatefulWidget {
   const VistaGestionClientes({super.key});
-
   @override
   State<VistaGestionClientes> createState() => _VistaGestionClientesState();
 }
-
 class _VistaGestionClientesState extends State<VistaGestionClientes> {
   bool _cargando = false;
-
   Future<void> _sincronizar() async {
     setState(() => _cargando = true);
     try {
@@ -1609,7 +1541,6 @@ class _VistaGestionClientesState extends State<VistaGestionClientes> {
       setState(() => _cargando = false);
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1671,20 +1602,16 @@ class _VistaGestionClientesState extends State<VistaGestionClientes> {
     );
   }
 }
-
 // ==========================================
 // 4. PESTAÑA: GESTIÓN DE PRODUCTOS
 // ==========================================
 class VistaGestionProductos extends StatefulWidget {
   const VistaGestionProductos({super.key});
-
   @override
   State<VistaGestionProductos> createState() => _VistaGestionProductosState();
 }
-
 class _VistaGestionProductosState extends State<VistaGestionProductos> {
   bool _cargando = false;
-
   Future<void> _sincronizar() async {
     setState(() => _cargando = true);
     try {
@@ -1703,7 +1630,6 @@ class _VistaGestionProductosState extends State<VistaGestionProductos> {
       setState(() => _cargando = false);
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1757,34 +1683,28 @@ class _VistaGestionProductosState extends State<VistaGestionProductos> {
     );
   }
 }
-
 // ==========================================
 // 5. PESTAÑA: RESUMEN GENERAL
 // ==========================================
 class VistaResumenGeneral extends StatefulWidget {
   const VistaResumenGeneral({super.key});
-
   @override
   State<VistaResumenGeneral> createState() => _VistaResumenGeneralState();
 }
-
 class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
   @override
   void initState() {
     super.initState();
     changeNotifierPedidos.addListener(_recargar);
   }
-
   @override
   void dispose() {
     changeNotifierPedidos.removeListener(_recargar);
     super.dispose();
   }
-
   void _recargar() {
     if (mounted) setState(() {});
   }
-
   Future<Map<String, dynamic>> _obtenerResumen() async {
     final db = await DatabaseHelper.instance.database;
     final totalPedidosRes = await db.rawQuery('SELECT COUNT(*) as count, SUM(total) as suma FROM pedidos');
@@ -1793,7 +1713,6 @@ class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
     double suma = (resultado['suma'] as num?)?.toDouble() ?? 0.0;
     return {'count': count, 'suma': suma};
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1847,34 +1766,28 @@ class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
     );
   }
 }
-
 // ==========================================
 // 6. PESTAÑA: RESUMEN POR PRODUCTO
 // ==========================================
 class VistaResumenProductos extends StatefulWidget {
   const VistaResumenProductos({super.key});
-
   @override
   State<VistaResumenProductos> createState() => _VistaResumenProductosState();
 }
-
 class _VistaResumenProductosState extends State<VistaResumenProductos> {
   @override
   void initState() {
     super.initState();
     changeNotifierPedidos.addListener(_recargar);
   }
-
   @override
   void dispose() {
     changeNotifierPedidos.removeListener(_recargar);
     super.dispose();
   }
-
   void _recargar() {
     if (mounted) setState(() {});
   } 
-
   Future<Map<String, int>> _obtenerResumenProductos() async {
     final db = await DatabaseHelper.instance.database;
     final pedidos = await db.query('pedidos');
@@ -1903,7 +1816,6 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
     }
     return conteoProductos;
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1955,7 +1867,6 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
     );
   }
 }
-
 // ==========================================
 // 7. PESTAÑA: EXPORTAR PDF
 // ==========================================
@@ -1965,7 +1876,6 @@ class VistaExportarPdf extends StatefulWidget {
   @override
   State<VistaExportarPdf> createState() => _VistaExportarPdfState();
 }
-
 class _VistaExportarPdfState extends State<VistaExportarPdf> {
   DateTime? _fechaInicio;
   DateTime? _fechaFin;
@@ -1973,7 +1883,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   int? _idPedidoSeleccionadoParaReporte;
   final TextEditingController _valorEntregadoController = TextEditingController();
   final TextEditingController _comentarioController = TextEditingController();
-
   @override
   void dispose() {
     _valorEntregadoController.dispose();
@@ -2111,14 +2020,12 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
           pw.Text(p['productos_json']?.toString() ?? '', style: const pw.TextStyle(fontSize: 9)),
         );
       }
-
       String numPedRaw = p['numero_pedido']?.toString() ?? '';
       if (numPedRaw.isEmpty) {
         numPedRaw = p['id']?.toString() ?? '';
       }
       String numLimpio = numPedRaw.replaceAll('Pedido', '').replaceAll('#', '').trim();
       String numeroPedidoFormateado = 'Pedido $numLimpio';
-
       filasReporteWidgets.add([
         pw.Text(numeroPedidoFormateado, style: const pw.TextStyle(fontSize: 9)),
         pw.Text(clienteConCodigo, style: const pw.TextStyle(fontSize: 9)),
@@ -2129,7 +2036,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         pw.Text("L. ${totalPedido.toStringAsFixed(2)}", style: const pw.TextStyle(fontSize: 9)),
       ]);
     }
-
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
@@ -2432,7 +2338,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     String nombre = 'Reporte_Productos_${DateTime.now().millisecondsSinceEpoch}.pdf';
     await _guardarYCompartirPdf(pdf, nombre);
   }
-
   Future<void> _generarPdfReporteGeneralPorCliente() async {
     final db = await DatabaseHelper.instance.database;
     final pedidos = await db.query('pedidos', orderBy: 'id ASC');
@@ -2728,7 +2633,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     const Text('Reporte Gral por Cliente', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 5),
@@ -2794,7 +2699,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                               alignment: Alignment.centerRight,
                               child: ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-                                onPressed: _generarPdfReporteGeneralPorCellOrGeneral: _generarPdfReporteGeneralPorCliente,
+                                onPressed: _generarPdfReporteGeneralPorCliente,
                                 icon: const Icon(Icons.picture_as_pdf),
                                 label: const Text('Exportar Reporte Clientes'),
                               ),
