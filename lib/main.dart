@@ -2308,7 +2308,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       if (comentario.isNotEmpty) {
         widgetsContenido.add(
           pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 2),
+            padding: const pw.EdgeInsets.only(top: 2, left: 10),
             child: pw.Text(comentario, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
           ),
         );
