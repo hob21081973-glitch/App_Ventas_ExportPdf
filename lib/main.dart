@@ -58,8 +58,9 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // Incrementado para futuras migraciones si se requiere
       onCreate: _createDB,
+      onUpgrade: _onUpgradeDB,
     );
   }
 
@@ -87,9 +88,19 @@ class DatabaseHelper {
         cliente TEXT,
         productos_json TEXT,
         total REAL,
-        fecha TEXT
+        fecha TEXT,
+        grupo TEXT DEFAULT ''
       )
     ''');
+  }
+
+  Future _onUpgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Intentar agregar la columna grupo si venía de una versión anterior
+      try {
+        await db.execute("ALTER TABLE pedidos ADD COLUMN grupo TEXT DEFAULT ''");
+      } catch (_) {}
+    }
   }
 
   Future<void> sincronizarClientesDesdeCSV(String csvData) async {
@@ -325,6 +336,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
         'productos_json': productosStr,
         'total': total,
         'fecha': fecha,
+        'grupo': '',
       });
     }
 
@@ -797,6 +809,7 @@ class VistaHistorialPedidos extends StatefulWidget {
 
 class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
   String _filtro = '';
+  bool _mostrarArchivados = false; // Alternar entre pedidos activos y archivados/grupos
 
   @override
   void initState() {
@@ -816,12 +829,14 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
 
   Future<List<Map<String, dynamic>>> _obtenerPedidos() async {
     final db = await DatabaseHelper.instance.database;
+    String condGrupo = _mostrarArchivados ? "grupo != ''" : "grupo = ''";
+    
     if (_filtro.isEmpty) {
-      return await db.query('pedidos', orderBy: 'id DESC');
+      return await db.query('pedidos', where: condGrupo, orderBy: 'id DESC');
     } else {
       return await db.query(
         'pedidos',
-        where: 'cliente LIKE ? OR numero_pedido LIKE ?',
+        where: '$condGrupo AND (cliente LIKE ? OR numero_pedido LIKE ?)',
         whereArgs: ['%$_filtro%', '%$_filtro%'],
         orderBy: 'id DESC',
       );
@@ -835,7 +850,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     setState(() {});
   }
 
-  // Función para resetear todo el historial de pedidos con confirmación
   // Función para resetear todo el historial de pedidos con confirmación
   void _confirmarReseteoHistorial() {
     showDialog(
@@ -856,11 +870,9 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
               final db = await DatabaseHelper.instance.database;
               await db.delete('pedidos');
               
-              // Reiniciar el autoincrementable de la tabla pedidos en SQLite
               try {
                 await db.execute("DELETE FROM sqlite_sequence WHERE name='pedidos'");
               } catch (_) {}
-
               changeNotifierPedidos.value++;
               setState(() {});
               
@@ -875,6 +887,112 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       ),
     );
   }
+
+  // Diálogo para agrupar (ocultar) pedidos en un bloque o semana
+  void _mostrarDialogoAgruparPedidos() async {
+    final db = await DatabaseHelper.instance.database;
+    final pedidosActivos = await db.query('pedidos', where: "grupo = ''", orderBy: 'id ASC');
+    
+    if (pedidosActivos.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay pedidos activos disponibles para agrupar')),
+      );
+      return;
+    }
+
+    Set<int> seleccionadosIds = {};
+    TextEditingController nombreGrupoController = TextEditingController(text: 'Pedidos Semana 01');
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: const Text('Agrupar y Ocultar Pedidos'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: Column(
+              children: [
+                TextField(
+                  controller: nombreGrupoController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre del grupo (Ej. Pedidos Semana 01)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text('Selecciona los pedidos a agrupar:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 5),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: pedidosActivos.length,
+                    itemBuilder: (context, index) {
+                      var p = pedidosActivos[index];
+                      int id = p['id'] as int;
+                      String numP = p['numero_pedido']?.toString() ?? 'Pedido #$id';
+                      String cli = p['cliente']?.toString() ?? 'Cliente';
+                      double tot = (p['total'] as num?)?.toDouble() ?? 0.0;
+                      bool isSelected = seleccionadosIds.contains(id);
+
+                      return CheckboxListTile(
+                        dense: true,
+                        title: Text('$numP - $cli', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        subtitle: Text('Total: L ${tot.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
+                        value: isSelected,
+                        onChanged: (bool? val) {
+                          setStateDialog(() {
+                            if (val == true) {
+                              seleccionadosIds.add(id);
+                            } else {
+                              seleccionadosIds.remove(id);
+                            }
+                          });
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+              onPressed: () async {
+                if (seleccionadosIds.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Selecciona al menos un pedido')),
+                  );
+                  return;
+                }
+                String nombreGrupo = nombreGrupoController.text.trim();
+                if (nombreGrupo.isEmpty) nombreGrupo = 'Grupo de Pedidos';
+
+                for (int id in seleccionadosIds) {
+                  await db.update('pedidos', {'grupo': nombreGrupo}, where: 'id = ?', whereArgs: [id]);
+                }
+
+                if (!mounted) return;
+                Navigator.pop(context);
+                changeNotifierPedidos.value++;
+                setState(() {});
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Pedidos agrupados y ocultados en "$nombreGrupo" con éxito')),
+                );
+              },
+              child: const Text('Guardar y Ocultar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _editarPedido(Map<String, dynamic> pedido) async {
     final mainState = context.findAncestorStateOfType<MenuPrincipalState>();
     if (mainState == null) return;
@@ -949,9 +1067,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     );
   }
 
-  // ==========================================
-  // FUNCIÓN PARA GENERAR EL PDF INDIVIDUAL
-  // ==========================================
   Future<void> _exportarPdfPedidoIndividual(Map<String, dynamic> pedido) async {
     final pdf = pw.Document();
     final db = await DatabaseHelper.instance.database;
@@ -970,7 +1085,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
       telefonoCliente = resCliente.first['telefono']?.toString() ?? '';
       codigoCliente = resCliente.first['codigo']?.toString() ?? '';
     }
-
     String prodStr = pedido['productos_json']?.toString() ?? '';
     List<String> items = prodStr.split(';');
     List<List<String>> filasProductos = [];
@@ -987,14 +1101,12 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         cantidad = int.tryParse(match.group(1) ?? '1') ?? 1;
         nombreProd = item.replaceFirst(regExp, '').trim();
       }
-
       String nombreBusqueda = nombreProd;
       int bracketStart = nombreBusqueda.indexOf('[');
       int bracketEnd = nombreBusqueda.lastIndexOf(']');
       if (bracketStart != -1 && bracketEnd != -1 && bracketEnd > bracketStart) {
         nombreBusqueda = nombreBusqueda.substring(0, bracketStart).trim();
       }
-
       conteoLineasProductos++; 
       double precioUnitario = 0.0;
       String codigoProd = '';
@@ -1008,9 +1120,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         precioUnitario = (resProd.first['precio'] as num?)?.toDouble() ?? 0.0;
         codigoProd = resProd.first['codigo']?.toString() ?? '';
       }
-
       String nombreConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
-
       double valorTotalFila = precioUnitario * cantidad;
       filasProductos.add([
         cantidad.toString(),
@@ -1033,13 +1143,11 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     } else {
       directorio = await getApplicationDocumentsDirectory();
     }
-
     String numPedidoRaw = pedido['numero_pedido']?.toString() ?? '';
     if (numPedidoRaw.isEmpty) {
       numPedidoRaw = 'Pedido #${pedido['id']}';
     }
     String numeroPedidoFormateado = numPedidoRaw;
-
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.letter,
@@ -1166,7 +1274,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         },
       ),
     );
-
     try {
       String numPedLimpio = (pedido['numero_pedido']?.toString() ?? 'pedido').replaceAll('#', '').replaceAll(' ', '_');
       final ruta = '${directorio!.path}/Nota_$numPedLimpio.pdf';
@@ -1183,7 +1290,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         SnackBar(content: Text('Error al generar el PDF: $e')),
       );
     }
-  } 
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1192,11 +1299,29 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Historial de Pedidos'),
-            IconButton(
-              icon: const Icon(Icons.delete_sweep, color: Colors.white),
-              tooltip: 'Resetear historial de pedidos',
-              onPressed: _confirmarReseteoHistorial,
+            Text(_mostrarArchivados ? 'Pedidos Archivados' : 'Historial de Pedidos'),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Nuevo icono de Archivar/Agrupar pedido (reemplaza el de basura)
+                IconButton(
+                  icon: Icon(_mostrarArchivados ? Icons.list : Icons.archive, color: Colors.white),
+                  tooltip: _mostrarArchivados ? 'Ver pedidos activos' : 'Agrupar y archivar pedidos',
+                  onPressed: () {
+                    if (_mostrarArchivados) {
+                      setState(() => _mostrarArchivados = false);
+                    } else {
+                      _mostrarDialogoAgruparPedidos();
+                    }
+                  },
+                ),
+                // Botón para resetear todo el historial de pedidos
+                IconButton(
+                  icon: const Icon(Icons.delete_sweep, color: Colors.amberAccent),
+                  tooltip: 'Resetear historial de pedidos',
+                  onPressed: _confirmarReseteoHistorial,
+                ),
+              ],
             ),
           ],
         ),
@@ -1207,17 +1332,37 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         padding: const EdgeInsets.all(12.0),
         child: Column(
           children: [
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Buscar por cliente o número de pedido...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (val) {
-                setState(() {
-                  _filtro = val.trim();
-                });
-              },
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Buscar por cliente o número de pedido...',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (val) {
+                      setState(() {
+                        _filtro = val.trim();
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _mostrarArchivados ? Colors.amber.shade700 : Colors.indigo.shade50,
+                    foregroundColor: _mostrarArchivados ? Colors.white : Colors.indigo,
+                  ),
+                  icon: Icon(_mostrarArchivados ? Icons.folder_open : Icons.folder_special),
+                  label: Text(_mostrarArchivados ? 'Ver Activos' : 'Archivados'),
+                  onPressed: () {
+                    setState(() {
+                      _mostrarArchivados = !_mostrarArchivados;
+                    });
+                  },
+                ),
+              ],
             ),
             const SizedBox(height: 10),
             Expanded(
@@ -1227,7 +1372,12 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                   final pedidos = snapshot.data!;
                   if (pedidos.isEmpty) {
-                    return const Center(child: Text('No hay pedidos registrados', style: TextStyle(color: Colors.grey)));
+                    return Center(
+                      child: Text(
+                        _mostrarArchivados ? 'No hay pedidos archivados o agrupados' : 'No hay pedidos registrados',
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                    );
                   }
                   return ListView.builder(
                     itemCount: pedidos.length,
@@ -1238,6 +1388,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                       final String cliente = p['cliente']?.toString() ?? 'Sin cliente';
                       final String fecha = p['fecha']?.toString() ?? '';
                       final double total = (p['total'] as num?)?.toDouble() ?? 0.0;
+                      final String grupo = p['grupo']?.toString() ?? '';
                        
                       String productosJson = p['productos_json']?.toString() ?? '';
                       List<String> listaProductos = productosJson
@@ -1260,13 +1411,23 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(
-                                      numPedido,
-                                      style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.indigo,
-                                      ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          numPedido,
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.indigo,
+                                          ),
+                                        ),
+                                        if (grupo.isNotEmpty)
+                                          Text(
+                                            'Bloque: $grupo',
+                                            style: const TextStyle(fontSize: 11, color: Colors.amber, fontWeight: FontWeight.bold),
+                                          ),
+                                      ],
                                     ),
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -1340,6 +1501,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     );
   }
 }
+
 // ==========================================
 // 3. PESTAÑA: GESTIÓN DE CLIENTES
 // ==========================================
@@ -1732,7 +1894,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   DateTime? _fechaInicio;
   DateTime? _fechaFin;
   
-  // Variables y controladores para el Reporte Gral por Cliente
   int? _idPedidoSeleccionadoParaReporte;
   final TextEditingController _valorEntregadoController = TextEditingController();
   final TextEditingController _comentarioController = TextEditingController();
@@ -1771,6 +1932,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     }
   }
   
+  // ========================================================
+  // REPORTE GENERAL CON DETALLES DE PRODUCTO EN LÍNEAS APARTE
+  // ========================================================
   Future<void> _generarPdfGeneral() async {
     final db = await DatabaseHelper.instance.database;
     String query = 'SELECT * FROM pedidos';
@@ -1798,7 +1962,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     for (var p in pedidos) {
       double totalPedido = (p['total'] as num?)?.toDouble() ?? 0.0;
       totalGeneral += totalPedido;
-
       String nombreClienteRaw = p['cliente']?.toString() ?? '';
       String codigoCliente = '';
       
@@ -1815,8 +1978,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       }
       
       String clienteConCodigo = codigoCliente.isNotEmpty ? '[$codigoCliente] $nombreClienteRaw' : nombreClienteRaw;
-
       String productosTexto = '';
+
       try {
         String prodStr = p['productos_json']?.toString() ?? '';
         if (prodStr.isNotEmpty) {
@@ -1836,9 +1999,12 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               nombreProd = item.replaceFirst(regExp, '').trim();
             }
 
+            // Extraer detalle entre corchetes
+            String detalleComentario = '';
             int bracketStart = nombreProd.indexOf('[');
             int bracketEnd = nombreProd.lastIndexOf(']');
             if (bracketStart != -1 && bracketEnd != -1 && bracketEnd > bracketStart) {
+              detalleComentario = nombreProd.substring(bracketStart + 1, bracketEnd).trim();
               nombreProd = nombreProd.substring(0, bracketStart).trim();
             }
 
@@ -1852,13 +2018,18 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             if (resProd.isNotEmpty) {
               codigoProd = resProd.first['codigo']?.toString() ?? '';
             }
-
             String prodConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
             
             if (itemsProcesados.isNotEmpty) {
               itemsProcesados.add('\n');
             }
+            // Línea principal del producto
             itemsProcesados.add('[   ] $prodConCodigo (x$cantidad)');
+
+            // Línea secundaria con sangría para el detalle
+            if (detalleComentario.isNotEmpty) {
+              itemsProcesados.add('\n    ↳ $detalleComentario');
+            }
           }
           productosTexto = itemsProcesados.join('');
         }
@@ -2005,10 +2176,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       );
       return;
     }
-
     Map<String, int> conteoProductos = {};
     Map<String, double> valorTotalProductos = {};
-
     for (var pedido in pedidos) {
       String productosJson = pedido['productos_json']?.toString() ?? '';
       List<String> items = productosJson.split(';');
@@ -2029,36 +2198,29 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             nombreProd = nombreProd.substring(0, bracketIdx).trim();
           }
         }
-
         conteoProductos[nombreProd] = (conteoProductos[nombreProd] ?? 0) + cantidad;
-
         final resProd = await db.query(
           'productos',
           where: 'nombre = ?',
           whereArgs: [nombreProd],
           limit: 1,
         );
-
         double precioUnitario = 0.0;
         if (resProd.isNotEmpty) {
           precioUnitario = (resProd.first['precio'] as num?)?.toDouble() ?? 0.0;
         }
-
         double subtotalItem = precioUnitario * cantidad;
         valorTotalProductos[nombreProd] = (valorTotalProductos[nombreProd] ?? 0.0) + subtotalItem;
       }
     }
-
     final listaOrdenada = conteoProductos.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
-
     List<List<String>> filasProductosVendidos = [];
     for (var entry in listaOrdenada) {
       String nombreProd = entry.key;
       int cantidadTotal = entry.value;
       double valorTotal = valorTotalProductos[nombreProd] ?? 0.0;
       String codigoProd = '';
-
       final resProd = await db.query(
         'productos',
         where: 'nombre = ?',
@@ -2068,7 +2230,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       if (resProd.isNotEmpty) {
         codigoProd = resProd.first['codigo']?.toString() ?? '';
       }
-
       String productoConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
       filasProductosVendidos.add([
         productoConCodigo,
@@ -2169,7 +2330,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   Future<void> _generarPdfReporteGeneralPorCliente() async {
     final db = await DatabaseHelper.instance.database;
     final pedidos = await db.query('pedidos', orderBy: 'id ASC');
-
     if (pedidos.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2177,11 +2337,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       );
       return;
     }
-
     List<List<String>> filasReporteGeneralCliente = [];
     double sumaTotalPedidos = 0.0;
     double sumaTotalEntregado = 0.0;
-
     for (var p in pedidos) {
       String nombreClienteRaw = p['cliente']?.toString() ?? '';
       String codigoCliente = '';
@@ -2201,7 +2359,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       String clienteConCodigo = codigoCliente.isNotEmpty 
           ? '[$codigoCliente] $nombreClienteRaw' 
           : nombreClienteRaw;
-
       int idPedido = p['id'] as int;
       String numPedRaw = p['numero_pedido']?.toString() ?? '';
       if (numPedRaw.isEmpty) {
@@ -2209,13 +2366,10 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       } else if (!numPedRaw.toLowerCase().contains('pedido')) {
         numPedRaw = 'Pedido $numPedRaw';
       }
-
       double totalPedido = (p['total'] as num?)?.toDouble() ?? 0.0;
       sumaTotalPedidos += totalPedido;
-
       double valEntregado = totalPedido;
       String comentario = 'Entregado';
-
       if (_idPedidoSeleccionadoParaReporte == idPedido) {
         if (_valorEntregadoController.text.isNotEmpty) {
           valEntregado = double.tryParse(_valorEntregadoController.text) ?? totalPedido;
@@ -2225,7 +2379,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         }
       }
       sumaTotalEntregado += valEntregado;
-
       filasReporteGeneralCliente.add([
         numPedRaw,
         clienteConCodigo,
@@ -2234,9 +2387,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         comentario.isEmpty ? '-' : comentario,
       ]);
     }
-
     double diferenciaTotal = sumaTotalPedidos - sumaTotalEntregado;
-
     final pdf = pw.Document();
     pdf.addPage(
       pw.MultiPage(
@@ -2289,7 +2440,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.end,
               children: [
-                // Total Pedido
                 pw.Row(
                   children: [
                     pw.Text('Total Pedido: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
@@ -2304,7 +2454,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   ],
                 ),
                 pw.SizedBox(width: 8),
-                // Total Entregado
                 pw.Row(
                   children: [
                     pw.Text('Total Entregado: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
@@ -2319,7 +2468,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   ],
                 ),
                 pw.SizedBox(width: 8),
-                // Diferencia
                 pw.Row(
                   children: [
                     pw.Text('Diferencia: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
@@ -2370,7 +2518,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         },
       ),
     );
-
     String nombre = 'Reporte_General_Por_Cliente_${DateTime.now().millisecondsSinceEpoch}.pdf';
     await _guardarYCompartirPdf(pdf, nombre);
   }
@@ -2470,9 +2617,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               ),
             ),
             const SizedBox(height: 15),
-            // ========================================================
-            // SECCIÓN: REPORTE GRAL POR CLIENTE
-            // ========================================================
             Card(
               elevation: 3,
               child: Padding(
