@@ -369,7 +369,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                   ),
                 ),
                 body: Padding(
-                  padding: const EdgeInsets.all(12.0),
+                  padding: const pw.pw.EdgeInsets.all(12.0),
                   child: Column(
                     children: [
                       TextField(
@@ -402,7 +402,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                               itemBuilder: (context, index) {
                                 final c = clientes[index];
                                 return Card(
-                                  margin: const EdgeInsets.symmetric(vertical: 4),
+                                  margin: const pw.pw.EdgeInsets.symmetric(vertical: 4),
                                   child: ListTile(
                                     title: Text('Cod: ${c['codigo']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo)),
                                     subtitle: Text('${c['nombre']}\nTel: ${c['telefono']}', style: const TextStyle(fontSize: 14)),
@@ -455,7 +455,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                   ),
                 ),
                 body: Padding(
-                  padding: const EdgeInsets.all(12.0),
+                  padding: const pw.pw.EdgeInsets.all(12.0),
                   child: Column(
                     children: [
                       TextField(
@@ -488,7 +488,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                               itemBuilder: (context, index) {
                                 final p = productos[index];
                                 return Card(
-                                  margin: const EdgeInsets.symmetric(vertical: 4),
+                                  margin: const pw.pw.EdgeInsets.symmetric(vertical: 4),
                                   child: ListTile(
                                     title: Text('Cod: ${p['codigo']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo)),
                                     subtitle: Text('${p['nombre']}\nPrecio: L ${p['precio'].toStringAsFixed(2)}', style: const TextStyle(fontSize: 14)),
@@ -672,7 +672,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const pw.EdgeInsets.all(12.0),
         child: Column(
           children: [
             Row(
@@ -681,7 +681,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                   child: GestureDetector(
                     onTap: _abrirBuscadorClientes,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey.shade400),
                         borderRadius: BorderRadius.circular(8),
@@ -738,9 +738,9 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                             ? item['comentario']
                             : '';
                         return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          margin: const pw.EdgeInsets.symmetric(vertical: 4),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),
+                            padding: const pw.EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),
                             child: Row(
                               children: [
                                 Expanded(
@@ -763,7 +763,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                                 InkWell(
                                   onTap: () => _mostrarDialogoGestionProducto(idx),
                                   child: Padding(
-                                    padding: const EdgeInsets.all(4.0),
+                                    padding: const pw.EdgeInsets.all(4.0),
                                     child: Text(
                                       'L ${(item['precio'] * item['cantidad']).toStringAsFixed(2)}', 
                                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.indigo),
@@ -1155,7 +1155,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
           if (detalleComentario.isNotEmpty)
             pw.Padding(
               // Sangría izquierda para que quede alineada después de los corchetes del código
-              padding: const pw.EdgeInsets.only(left: 35.0, top: 2.0),
+              padding: const pw.pw.EdgeInsets.only(left: 35.0, top: 2.0),
               child: pw.Text(
                 detalleComentario,
                 style: pw.TextStyle(
@@ -1196,7 +1196,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(32),
+        margin: const pw.pw.EdgeInsets.all(32),
         build: (pw.Context context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1256,19 +1256,19 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                     decoration: const pw.BoxDecoration(color: PdfColors.indigo),
                     children: [
                       pw.Padding(
-                        padding: const EdgeInsets.all(6),
+                        padding: const pw.EdgeInsets.all(6),
                         child: pw.Text('Cantidad', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10)),
                       ),
                       pw.Padding(
-                        padding: const EdgeInsets.all(6),
+                        padding: const pw.EdgeInsets.all(6),
                         child: pw.Text('Descripción', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10)),
                       ),
                       pw.Padding(
-                        padding: const EdgeInsets.all(6),
+                        padding: const pw.EdgeInsets.all(6),
                         child: pw.Text('Precio Unitario', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10), textAlign: pw.TextAlign.right),
                       ),
                       pw.Padding(
-                        padding: const EdgeInsets.all(6),
+                        padding: const pw.EdgeInsets.all(6),
                         child: pw.Text('Valor Total', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10), textAlign: pw.TextAlign.right),
                       ),
                     ],
@@ -1278,19 +1278,19 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                     pw.TableRow(
                       children: [
                         pw.Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                          padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 4),
                           child: fila[0],
                         ),
                         pw.Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                          padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 4),
                           child: fila[1],
                         ),
                         pw.Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                          padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 4),
                           child: pw.Align(alignment: pw.Alignment.centerRight, child: fila[2]),
                         ),
                         pw.Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                          padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 4),
                           child: pw.Align(alignment: pw.Alignment.centerRight, child: fila[3]),
                         ),
                       ],
@@ -1303,7 +1303,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Container(
-                    padding: const pw.EdgeInsets.all(8),
+                    padding: const pw.pw.EdgeInsets.all(8),
                     decoration: pw.BoxDecoration(
                       border: pw.Border.all(color: PdfColors.grey400),
                       borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
@@ -1410,7 +1410,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         foregroundColor: Colors.white,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const pw.EdgeInsets.all(12.0),
         child: Column(
           children: [
             Row(
@@ -1480,12 +1480,12 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
 
                       return Container(
                         width: double.infinity,
-                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        margin: const pw.EdgeInsets.symmetric(vertical: 6),
                         child: Card(
                           elevation: 3,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           child: Padding(
-                            padding: const EdgeInsets.all(16.0),
+                            padding: const pw.EdgeInsets.all(16.0),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -1542,7 +1542,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                                 ),
                                 const SizedBox(height: 4),
                                 ...listaProductos.map((prod) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 2),
+                                  padding: const pw.EdgeInsets.only(bottom: 2),
                                   child: Text(
                                     '• $prod',
                                     style: const TextStyle(fontSize: 13),
@@ -1653,7 +1653,7 @@ class _VistaGestionClientesState extends State<VistaGestionClientes> {
                   itemBuilder: (context, index) {
                     final c = clientes[index];
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      margin: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       child: ListTile(
                         title: Text(c['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text('Código: ${c['codigo']} | Tel: ${c['telefono']}'),
@@ -1747,7 +1747,7 @@ class _VistaGestionProductosState extends State<VistaGestionProductos> {
                   itemBuilder: (context, index) {
                     final p = productos[index];
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      margin: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       child: ListTile(
                         title: Text(p['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text('Código: ${p['codigo']}'),
@@ -1812,14 +1812,14 @@ class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           final data = snapshot.data!;
           return Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const pw.EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Card(
                   elevation: 4,
                   child: Padding(
-                    padding: const EdgeInsets.all(20.0),
+                    padding: const pw.EdgeInsets.all(20.0),
                     child: Column(
                       children: [
                         const Text('Total de Pedidos Realizados', style: TextStyle(fontSize: 16, color: Colors.grey)),
@@ -1833,7 +1833,7 @@ class _VistaResumenGeneralState extends State<VistaResumenGeneral> {
                 Card(
                   elevation: 4,
                   child: Padding(
-                    padding: const EdgeInsets.all(20.0),
+                    padding: const pw.EdgeInsets.all(20.0),
                     child: Column(
                       children: [
                         const Text('Monto Total Vendido', style: TextStyle(fontSize: 16, color: Colors.grey)),
@@ -1932,11 +1932,11 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
             itemBuilder: (context, index) {
               final entry = resumen[index];
               return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                margin: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 child: ListTile(
                   title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
                   trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: Colors.indigo.shade50,
                       borderRadius: BorderRadius.circular(12),
@@ -2135,7 +2135,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(24),
+        margin: const pw.pw.EdgeInsets.all(24),
         build: (pw.Context context) {
           return [
             pw.Row(
@@ -2190,7 +2190,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               children: [
                 pw.Text('Total Gral: ', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                 pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  padding: const pw.pw.EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                   decoration: pw.BoxDecoration(
                     border: pw.Border.all(color: PdfColors.grey700),
                     borderRadius: pw.BorderRadius.circular(4),
@@ -2214,7 +2214,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 color: PdfColors.blue900,
               ),
               cellStyle: const pw.TextStyle(fontSize: 9),
-              cellPadding: const pw.EdgeInsets.all(6),
+              cellPadding: const pw.pw.EdgeInsets.all(6),
               columnWidths: {
                 0: const pw.FlexColumnWidth(0.9), 
                 1: const pw.FlexColumnWidth(2.2), 
@@ -2322,7 +2322,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(24),
+        margin: const pw.pw.EdgeInsets.all(24),
         build: (pw.Context context) {
           return [
             pw.Row(
@@ -2386,7 +2386,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 color: PdfColors.blue900,
               ),
               cellStyle: const pw.TextStyle(fontSize: 9),
-              cellPadding: const pw.EdgeInsets.all(6),
+              cellPadding: const pw.pw.EdgeInsets.all(6),
               columnWidths: {
                 0: const pw.FlexColumnWidth(4.5),
                 1: const pw.FlexColumnWidth(1.5),
@@ -2472,7 +2472,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(24),
+        margin: const pw.pw.EdgeInsets.all(24),
         build: (pw.Context context) {
           return [
             pw.Row(
@@ -2524,7 +2524,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   children: [
                     pw.Text('Total Pedido: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
                     pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const pw.pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: pw.BoxDecoration(
                         border: pw.Border.all(color: PdfColors.grey700),
                         borderRadius: pw.BorderRadius.circular(4),
@@ -2538,7 +2538,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   children: [
                     pw.Text('Total Entregado: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
                     pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const pw.pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: pw.BoxDecoration(
                         border: pw.Border.all(color: PdfColors.grey700),
                         borderRadius: pw.BorderRadius.circular(4),
@@ -2552,7 +2552,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   children: [
                     pw.Text('Diferencia: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
                     pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const pw.pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: pw.BoxDecoration(
                         border: pw.Border.all(color: PdfColors.grey700),
                         borderRadius: pw.BorderRadius.circular(4),
@@ -2578,7 +2578,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 color: PdfColors.blue900,
               ),
               cellStyle: const pw.TextStyle(fontSize: 9),
-              cellPadding: const pw.EdgeInsets.all(6),
+              cellPadding: const pw.pw.EdgeInsets.all(6),
               columnWidths: {
                 0: const pw.FlexColumnWidth(1.5),
                 1: const pw.FlexColumnWidth(2.5),
@@ -2611,13 +2611,13 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         foregroundColor: Colors.white,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const pw.EdgeInsets.all(16.0),
         child: ListView(
           children: [
             Card(
               elevation: 3,
               child: Padding(
-                padding: const EdgeInsets.all(12.0),
+                padding: const pw.EdgeInsets.all(12.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -2700,7 +2700,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             Card(
               elevation: 3,
               child: Padding(
-                padding: const EdgeInsets.all(12.0),
+                padding: const pw.EdgeInsets.all(12.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -2724,7 +2724,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                               decoration: const InputDecoration(
                                 labelText: 'Seleccionar Pedido',
                                 border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                contentPadding: pw.EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                               ),
                               value: _idPedidoSeleccionadoParaReporte,
                               items: pedidos.map((p) {
