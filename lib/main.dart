@@ -369,7 +369,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                   ),
                 ),
                 body: Padding(
-                  padding: const pw.EdgeInsets.all(12.0),
+                  padding: const EdgeInsets.all(12.0),
                   child: Column(
                     children: [
                       TextField(
@@ -402,7 +402,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                               itemBuilder: (context, index) {
                                 final c = clientes[index];
                                 return Card(
-                                  margin: const pw.EdgeInsets.symmetric(vertical: 4),
+                                  margin: const EdgeInsets.symmetric(vertical: 4),
                                   child: ListTile(
                                     title: Text('Cod: ${c['codigo']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo)),
                                     subtitle: Text('${c['nombre']}\nTel: ${c['telefono']}', style: const TextStyle(fontSize: 14)),
@@ -455,7 +455,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                   ),
                 ),
                 body: Padding(
-                  padding: const pw.EdgeInsets.all(12.0),
+                  padding: const EdgeInsets.all(12.0),
                   child: Column(
                     children: [
                       TextField(
@@ -488,7 +488,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                               itemBuilder: (context, index) {
                                 final p = productos[index];
                                 return Card(
-                                  margin: const pw.EdgeInsets.symmetric(vertical: 4),
+                                  margin: const EdgeInsets.symmetric(vertical: 4),
                                   child: ListTile(
                                     title: Text('Cod: ${p['codigo']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo)),
                                     subtitle: Text('${p['nombre']}\nPrecio: L ${p['precio'].toStringAsFixed(2)}', style: const TextStyle(fontSize: 14)),
@@ -681,7 +681,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                   child: GestureDetector(
                     onTap: _abrirBuscadorClientes,
                     child: Container(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey.shade400),
                         borderRadius: BorderRadius.circular(8),
@@ -740,7 +740,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                         return Card(
                           margin: const pw.EdgeInsets.symmetric(vertical: 4),
                           child: Padding(
-                            padding: const pw.EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),
+                            padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),
                             child: Row(
                               children: [
                                 Expanded(
@@ -763,7 +763,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                                 InkWell(
                                   onTap: () => _mostrarDialogoGestionProducto(idx),
                                   child: Padding(
-                                    padding: const pw.EdgeInsets.all(4.0),
+                                    padding: const EdgeInsets.all(4.0),
                                     child: Text(
                                       'L ${(item['precio'] * item['cantidad']).toStringAsFixed(2)}', 
                                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.indigo),
