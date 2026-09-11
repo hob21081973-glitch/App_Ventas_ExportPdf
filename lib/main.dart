@@ -2008,7 +2008,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             if (detalleComentario.isNotEmpty) {
               widgetsProductosPedido.add(
                 pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 4, left: 10),
+                  padding: const pw.EdgeInsets.only(bottom: 5, left: 10),
                   child: pw.Text(detalleComentario, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
                 ),
               );
