@@ -369,7 +369,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                   ),
                 ),
                 body: Padding(
-                  padding: const pw.pw.EdgeInsets.all(12.0),
+                  padding: const pw.EdgeInsets.all(12.0),
                   child: Column(
                     children: [
                       TextField(
@@ -402,7 +402,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                               itemBuilder: (context, index) {
                                 final c = clientes[index];
                                 return Card(
-                                  margin: const pw.pw.EdgeInsets.symmetric(vertical: 4),
+                                  margin: const pw.EdgeInsets.symmetric(vertical: 4),
                                   child: ListTile(
                                     title: Text('Cod: ${c['codigo']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo)),
                                     subtitle: Text('${c['nombre']}\nTel: ${c['telefono']}', style: const TextStyle(fontSize: 14)),
@@ -455,7 +455,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                   ),
                 ),
                 body: Padding(
-                  padding: const pw.pw.EdgeInsets.all(12.0),
+                  padding: const pw.EdgeInsets.all(12.0),
                   child: Column(
                     children: [
                       TextField(
@@ -488,7 +488,7 @@ class _VistaCrearPedidoState extends State<VistaCrearPedido> {
                               itemBuilder: (context, index) {
                                 final p = productos[index];
                                 return Card(
-                                  margin: const pw.pw.EdgeInsets.symmetric(vertical: 4),
+                                  margin: const pw.EdgeInsets.symmetric(vertical: 4),
                                   child: ListTile(
                                     title: Text('Cod: ${p['codigo']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo)),
                                     subtitle: Text('${p['nombre']}\nPrecio: L ${p['precio'].toStringAsFixed(2)}', style: const TextStyle(fontSize: 14)),
@@ -1155,7 +1155,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
           if (detalleComentario.isNotEmpty)
             pw.Padding(
               // Sangría izquierda para que quede alineada después de los corchetes del código
-              padding: const pw.pw.EdgeInsets.only(left: 35.0, top: 2.0),
+              padding: const pw.EdgeInsets.only(left: 35.0, top: 2.0),
               child: pw.Text(
                 detalleComentario,
                 style: pw.TextStyle(
@@ -1196,7 +1196,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.letter,
-        margin: const pw.pw.EdgeInsets.all(32),
+        margin: const pw.EdgeInsets.all(32),
         build: (pw.Context context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1303,7 +1303,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Container(
-                    padding: const pw.pw.EdgeInsets.all(8),
+                    padding: const pw.EdgeInsets.all(8),
                     decoration: pw.BoxDecoration(
                       border: pw.Border.all(color: PdfColors.grey400),
                       borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
@@ -2135,7 +2135,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
-        margin: const pw.pw.EdgeInsets.all(24),
+        margin: const pw.EdgeInsets.all(24),
         build: (pw.Context context) {
           return [
             pw.Row(
@@ -2190,7 +2190,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               children: [
                 pw.Text('Total Gral: ', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                 pw.Container(
-                  padding: const pw.pw.EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                   decoration: pw.BoxDecoration(
                     border: pw.Border.all(color: PdfColors.grey700),
                     borderRadius: pw.BorderRadius.circular(4),
@@ -2214,7 +2214,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 color: PdfColors.blue900,
               ),
               cellStyle: const pw.TextStyle(fontSize: 9),
-              cellPadding: const pw.pw.EdgeInsets.all(6),
+              cellPadding: const pw.EdgeInsets.all(6),
               columnWidths: {
                 0: const pw.FlexColumnWidth(0.9), 
                 1: const pw.FlexColumnWidth(2.2), 
@@ -2322,7 +2322,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
-        margin: const pw.pw.EdgeInsets.all(24),
+        margin: const pw.EdgeInsets.all(24),
         build: (pw.Context context) {
           return [
             pw.Row(
@@ -2386,7 +2386,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 color: PdfColors.blue900,
               ),
               cellStyle: const pw.TextStyle(fontSize: 9),
-              cellPadding: const pw.pw.EdgeInsets.all(6),
+              cellPadding: const pw.EdgeInsets.all(6),
               columnWidths: {
                 0: const pw.FlexColumnWidth(4.5),
                 1: const pw.FlexColumnWidth(1.5),
@@ -2472,7 +2472,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
-        margin: const pw.pw.EdgeInsets.all(24),
+        margin: const pw.EdgeInsets.all(24),
         build: (pw.Context context) {
           return [
             pw.Row(
@@ -2524,7 +2524,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   children: [
                     pw.Text('Total Pedido: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
                     pw.Container(
-                      padding: const pw.pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: pw.BoxDecoration(
                         border: pw.Border.all(color: PdfColors.grey700),
                         borderRadius: pw.BorderRadius.circular(4),
@@ -2538,7 +2538,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   children: [
                     pw.Text('Total Entregado: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
                     pw.Container(
-                      padding: const pw.pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: pw.BoxDecoration(
                         border: pw.Border.all(color: PdfColors.grey700),
                         borderRadius: pw.BorderRadius.circular(4),
@@ -2552,7 +2552,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   children: [
                     pw.Text('Diferencia: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
                     pw.Container(
-                      padding: const pw.pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: pw.BoxDecoration(
                         border: pw.Border.all(color: PdfColors.grey700),
                         borderRadius: pw.BorderRadius.circular(4),
@@ -2578,7 +2578,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                 color: PdfColors.blue900,
               ),
               cellStyle: const pw.TextStyle(fontSize: 9),
-              cellPadding: const pw.pw.EdgeInsets.all(6),
+              cellPadding: const pw.EdgeInsets.all(6),
               columnWidths: {
                 0: const pw.FlexColumnWidth(1.5),
                 1: const pw.FlexColumnWidth(2.5),
