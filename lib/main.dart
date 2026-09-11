@@ -2035,15 +2035,12 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             String prodConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
             
             widgetsProductosPedido.add(
-              pw.Padding(
-                padding: const pw.EdgeInsets.only(bottom: 2),
-                child: pw.Text('[   ] $prodConCodigo (x$cantidad)', style: const pw.TextStyle(fontSize: 9)),
-              ),
+              pw.Text('[   ] $prodConCodigo (x$cantidad)', style: const pw.TextStyle(fontSize: 9)),
             );
             if (detalleComentario.isNotEmpty) {
               widgetsProductosPedido.add(
                 pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 7, left: 10),
+                  padding: const pw.EdgeInsets.only(left: 10, bottom: 2),
                   child: pw.Text(detalleComentario, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
                 ),
               );
@@ -2308,7 +2305,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       if (comentario.isNotEmpty) {
         widgetsContenido.add(
           pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 2, left: 10),
+            padding: const pw.EdgeInsets.only(left: 7),
             child: pw.Text(comentario, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
           ),
         );
