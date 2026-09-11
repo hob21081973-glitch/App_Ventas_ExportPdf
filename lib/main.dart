@@ -2585,8 +2585,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               elevation: 3,
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Reporte General de Ventas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 5),
