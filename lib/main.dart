@@ -1087,7 +1087,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     }
     String prodStr = pedido['productos_json']?.toString() ?? '';
     List<String> items = prodStr.split(';');
-    List<List<String>> filasProductos = [];
+    List<List<pw.Widget>> filasProductos = [];
     int conteoLineasProductos = 0; 
      
     for (var item in items) {
@@ -1120,13 +1120,58 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
         precioUnitario = (resProd.first['precio'] as num?)?.toDouble() ?? 0.0;
         codigoProd = resProd.first['codigo']?.toString() ?? '';
       }
-      String nombreConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
       double valorTotalFila = precioUnitario * cantidad;
+
+      // Extraer comentario si existe (lo que está entre [ y ] en el nombre del producto)
+      String detalleComentario = '';
+      int bStart = nombreProd.indexOf('[');
+      int bEnd = nombreProd.lastIndexOf(']');
+      String nombreLimpio = nombreProd;
+      if (bStart != -1 && bEnd != -1 && bEnd > bStart) {
+        detalleComentario = nombreProd.substring(bStart + 1, bEnd).trim();
+        nombreLimpio = nombreProd.substring(0, bStart).trim();
+      }
+
+      // Construcción del widget para la descripción con el código y el detalle abajo con sangría
+      pw.Widget widgetDescripcion = pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              if (codigoProd.isNotEmpty)
+                pw.Text(
+                  '[$codigoProd] ',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+                ),
+              pw.Expanded(
+                child: pw.Text(
+                  nombreLimpio,
+                  style: pw.TextStyle(fontSize: 10),
+                ),
+              ),
+            ],
+          ),
+          if (detalleComentario.isNotEmpty)
+            pw.Padding(
+              // Sangría izquierda para que quede alineada después de los corchetes del código
+              padding: const pw.EdgeInsets.only(left: 35.0, top: 2.0),
+              child: pw.Text(
+                detalleComentario,
+                style: pw.TextStyle(
+                  fontSize: 9,
+                  color: PdfColors.grey700,
+                ),
+              ),
+            ),
+        ],
+      );
+
       filasProductos.add([
-        cantidad.toString(),
-        nombreConCodigo,
-        precioUnitario.toStringAsFixed(2),
-        valorTotalFila.toStringAsFixed(2),
+        pw.Text(cantidad.toString(), style: const pw.TextStyle(fontSize: 10)),
+        widgetDescripcion,
+        pw.Text(precioUnitario.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
+        pw.Text(valorTotalFila.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 10)),
       ]);
     }
      
@@ -1197,24 +1242,60 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                 pw.Text('Teléfono: $telefonoCliente', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
              
               pw.SizedBox(height: 20),
-              pw.Table.fromTextArray(
-                headers: ['Cantidad', 'Descripción', 'Precio Unitario', 'Valor Total'],
-                data: filasProductos,
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo),
-                cellStyle: const pw.TextStyle(fontSize: 10),
+              pw.Table(
+                border: null,
                 columnWidths: {
                   0: const pw.FlexColumnWidth(1),
                   1: const pw.FlexColumnWidth(6),
                   2: const pw.FlexColumnWidth(1),
                   3: const pw.FlexColumnWidth(1),
                 },
-                cellAlignment: pw.Alignment.centerLeft,
-                cellAlignments: {
-                  0: pw.Alignment.center,
-                  2: pw.Alignment.centerRight,
-                  3: pw.Alignment.centerRight,
-                },
+                children: [
+                  // Cabecera de la tabla
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfColors.indigo),
+                    children: [
+                      pw.Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: pw.Text('Cantidad', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10)),
+                      ),
+                      pw.Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: pw.Text('Descripción', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10)),
+                      ),
+                      pw.Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: pw.Text('Precio Unitario', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10), textAlign: pw.TextAlign.right),
+                      ),
+                      pw.Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: pw.Text('Valor Total', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10), textAlign: pw.TextAlign.right),
+                      ),
+                    ],
+                  ),
+                  // Filas de productos con widgets personalizados
+                  for (var fila in filasProductos)
+                    pw.TableRow(
+                      children: [
+                        pw.Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                          child: fila[0],
+                        ),
+                        pw.Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                          child: fila[1],
+                        ),
+                        pw.Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                          child: pw.Align(alignment: pw.Alignment.centerRight, child: fila[2]),
+                        ),
+                        pw.Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                          child: pw.Align(alignment: pw.Alignment.centerRight, child: fila[3]),
+                        ),
+                      ],
+                    ),
+                ],
               ),
               pw.SizedBox(height: 20),
               pw.Row(
@@ -1501,7 +1582,6 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
     );
   }
 }
-
 // ==========================================
 // 3. PESTAÑA: GESTIÓN DE CLIENTES
 // ==========================================
