@@ -1909,6 +1909,7 @@ class VistaExportarPdf extends StatefulWidget {
   @override
   State<VistaExportarPdf> createState() => _VistaExportarPdfState();
 }
+
 class _VistaExportarPdfState extends State<VistaExportarPdf> {
   DateTime? _fechaInicio;
   DateTime? _fechaFin;
@@ -1916,6 +1917,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   int? _idPedidoSeleccionadoParaReporte;
   final TextEditingController _valorEntregadoController = TextEditingController();
   final TextEditingController _comentarioController = TextEditingController();
+
   @override
   void dispose() {
     _valorEntregadoController.dispose();
@@ -2082,7 +2084,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
-                      "D  I  C  O  S  M  O",
+                      "D   I   C   O   S   M   O",
                       style: pw.TextStyle(
                         fontSize: 18,
                         fontWeight: pw.FontWeight.bold,
@@ -2297,7 +2299,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
-                      "D  I  C  O  S  M  O",
+                      "D   I   C   O   S   M   O",
                       style: pw.TextStyle(
                         fontSize: 18,
                         fontWeight: pw.FontWeight.bold,
@@ -2371,6 +2373,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     String nombre = 'Reporte_Productos_${DateTime.now().millisecondsSinceEpoch}.pdf';
     await _guardarYCompartirPdf(pdf, nombre);
   }
+
   Future<void> _generarPdfReporteGeneralPorCliente() async {
     final db = await DatabaseHelper.instance.database;
     final pedidos = await db.query('pedidos', orderBy: 'id ASC');
@@ -2446,7 +2449,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
-                      "D  I  C  O  S  M  O",
+                      "D   I   C   O   S   M   O",
                       style: pw.TextStyle(
                         fontSize: 18,
                         fontWeight: pw.FontWeight.bold,
@@ -2583,7 +2586,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     const Text('Reporte General de Ventas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 5),
@@ -2672,74 +2675,11 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                     const SizedBox(height: 5),
                     const Text('Selecciona un pedido para registrar su valor entregado y comentario.', style: TextStyle(fontSize: 12, color: Colors.grey)),
                     const SizedBox(height: 10),
-                    FutureBuilder<List<Map<String, dynamic>>>(
-                      future: DatabaseHelper.instance.database.then((db) => db.query('pedidos', orderBy: 'id DESC')),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                        final pedidosList = snapshot.data!;
-                        if (pedidosList.isEmpty) {
-                          return const Text('No hay pedidos disponibles', style: TextStyle(color: Colors.grey, fontSize: 12));
-                        }
-                        return Column(
-                          children: [
-                            DropdownButtonFormField<int>(
-                              isExpanded: true,
-                              decoration: const InputDecoration(
-                                labelText: 'Seleccionar Pedido',
-                                border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                              ),
-                              value: _idPedidoSeleccionadoParaReporte,
-                              items: pedidosList.map((p) {
-                                int id = p['id'] as int;
-                                String numP = p['numero_pedido']?.toString() ?? 'Pedido #$id';
-                                String cli = p['cliente']?.toString() ?? '';
-                                return DropdownMenuItem<int>(
-                                  value: id,
-                                  child: Text('$numP - $cli', overflow: TextOverflow.ellipsis),
-                                );
-                              }).toList(),
-                              onChanged: (val) {
-                                setState(() {
-                                  _idPedidoSeleccionadoParaReporte = val;
-                                  if (val != null) {
-                                    var pedidoSel = pedidosList.firstWhere((element) => element['id'] == val);
-                                    double tot = (pedidoSel['total'] as num?)?.toDouble() ?? 0.0;
-                                    _valorEntregadoController.text = tot.toStringAsFixed(2);
-                                  }
-                                });
-                              },
-                            ),
-                            const SizedBox(height: 10),
-                            TextField(
-                              controller: _valorEntregadoController,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(
-                                labelText: 'Valor Entregado (L.)',
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            TextField(
-                              controller: _comentarioController,
-                              decoration: const InputDecoration(
-                                labelText: 'Comentario (Ej. Entregado, Pagado parcial...)',
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-                                onPressed: _generarPdfReporteGeneralPorCliente,
-                                icon: const Icon(Icons.picture_as_pdf),
-                                label: const Text('Exportar Reporte Clientes'),
-                              ),
-                            ),
-                          ],
-                        );
-                      },
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                      onPressed: _generarPdfReporteGeneralPorCliente,
+                      icon: const Icon(Icons.picture_as_pdf),
+                      label: const Text('Exportar Reporte por Cliente'),
                     ),
                   ],
                 ),
