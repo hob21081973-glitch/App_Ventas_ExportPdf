@@ -1125,11 +1125,11 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
           ),
           if (detalleComentario.isNotEmpty)
             pw.Padding(
-              padding: pw.EdgeInsets.only(left: codigoProd.isNotEmpty ? (codigoProd.length * 8.0) + 12.0 : 0.0, top: 2.0),
+              padding: pw.EdgeInsets.only(left: codigoProd.isNotEmpty ? (codigoProd.length * 6.0) + 12.0 : 0.0, top: 2.0),
               child: pw.Text(
                 detalleComentario,
                 style: const pw.TextStyle(
-                  fontSize: 9,
+                  fontSize: 10,
                   color: PdfColors.grey700,
                 ),
               ),
@@ -1187,7 +1187,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                         ),
                       ),
                       pw.SizedBox(height: 5),
-                      pw.Text('Productos Industrias Chamer y Mas', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      pw.Text('Productos Industrias Chamer y Mas', style: const pw.TextStyle(fontSize: 14, color: PdfColors.grey700)),
                     ],
                   ),
                   pw.Column(
@@ -1195,7 +1195,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
                     children: [
                       pw.Text('FECHA: ${pedido['fecha']?.toString().substring(0, 10) ?? ''}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
                       pw.SizedBox(height: 3),
-                      pw.Text(numeroPedidoFormateado, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: PdfColors.indigo900)),
+                      pw.Text(numeroPedidoFormateado, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: PdfColors.indigo900)),
                     ],
                   ),
                 ],
@@ -1203,13 +1203,13 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
               pw.SizedBox(height: 15),
               pw.Divider(color: PdfColors.grey400),
               pw.SizedBox(height: 10),
-              pw.Text('CLIENTE:', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+              pw.Text('CLIENTE:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
               pw.SizedBox(height: 2),
               pw.Text(clienteNombre, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               if (codigoCliente.isNotEmpty)
-                pw.Text('Código: $codigoCliente', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+                pw.Text('Código: $codigoCliente', style: const pw.TextStyle(fontSize: 14, color: PdfColors.grey700)),
               if (telefonoCliente.isNotEmpty)
-                pw.Text('Teléfono: $telefonoCliente', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+                pw.Text('Teléfono: $telefonoCliente', style: const pw.TextStyle(fontSize: 14, color: PdfColors.grey700)),
              
               pw.SizedBox(height: 20),
               pw.Table(
