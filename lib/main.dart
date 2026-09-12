@@ -1941,21 +1941,31 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   // --- LÓGICA DE AGRUPACIÓN POR SEMANAS GUARDADAS ---
   
   Future<void> _cargarSemanas() async {
-    final db = await DatabaseHelper.instance.database;
-    // Consulta los valores únicos de la columna semana
-    final result = await db.rawQuery('SELECT DISTINCT semana FROM pedidos WHERE semana IS NOT NULL AND semana != ""');
-    
-    List<String> semanas = result.map((e) => e['semana'].toString()).toList();
-    semanas.sort((a, b) => b.compareTo(a)); // Ordena las semanas de la más reciente a la más antigua
-    
-    setState(() {
-      _semanasDisponibles = semanas;
-    });
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final result = await db.rawQuery('SELECT DISTINCT semana FROM pedidos WHERE semana IS NOT NULL AND semana != ""');
+      
+      List<String> semanas = result.map((e) => e['semana'].toString()).toList();
+      semanas.sort((a, b) => b.compareTo(a)); 
+      
+      setState(() {
+        _semanasDisponibles = semanas;
+        // Validación de seguridad para destrabar el Dropdown
+        if (!_semanasDisponibles.contains(_semanaSeleccionada)) {
+          _semanaSeleccionada = null;
+        }
+      });
+    } catch (e) {
+      // Por si la columna aún no existe o hay error en la base de datos
+      setState(() {
+        _semanasDisponibles = [];
+        _semanaSeleccionada = null;
+      });
+    }
   }
 
   Future<void> _cargarPedidosPorSemana(String semana) async {
     final db = await DatabaseHelper.instance.database;
-    // Filtra los pedidos usando la semana seleccionada
     final filtrados = await db.query(
       'pedidos', 
       where: 'semana = ?', 
@@ -2029,7 +2039,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       const SnackBar(content: Text('¡Datos de entrega guardados exitosamente!'), backgroundColor: Colors.green),
     );
     
-    // Recargar los pedidos y limpiar los campos de pantalla
+    // Recargar los pedidos de la semana para ocultar el procesado y limpiar pantalla
     if (_semanaSeleccionada != null) {
       await _cargarPedidosPorSemana(_semanaSeleccionada!);
     }
@@ -2041,10 +2051,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     try {
       Directory? directorio;
       if (Platform.isAndroid) {
-        // Ruta de descargas que solicitaste
+        // Ruta exacta solicitada para todos los PDFs
         directorio = Directory('/storage/emulated/0/download');
         if (!await directorio.exists()) {
-          // Fallback por si la carpeta no existe
           await directorio.create(recursive: true);
         }
       } else {
@@ -2598,15 +2607,16 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                     ),
                     const Divider(),
                     
-                    // Selector de Semana
+                    // Selector de Semana (Con validación de vacíos)
                     DropdownButtonFormField<String>(
                       decoration: const InputDecoration(labelText: '1. Selecciona la Semana', border: OutlineInputBorder()),
-                      value: _semanaSeleccionada,
+                      value: _semanasDisponibles.contains(_semanaSeleccionada) ? _semanaSeleccionada : null,
                       isExpanded: true,
+                      hint: Text(_semanasDisponibles.isEmpty ? 'No hay semanas guardadas' : 'Selecciona una semana'),
                       items: _semanasDisponibles.map((semana) {
                         return DropdownMenuItem(value: semana, child: Text(semana, style: const TextStyle(fontSize: 14)));
                       }).toList(),
-                      onChanged: (val) {
+                      onChanged: _semanasDisponibles.isEmpty ? null : (val) {
                         if (val != null) {
                           setState(() => _semanaSeleccionada = val);
                           _cargarPedidosPorSemana(val);
@@ -2615,11 +2625,14 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                     ),
                     const SizedBox(height: 15),
                     
-                    // Selector de Pedido
+                    // Selector de Pedido (Con validación de vacíos)
                     DropdownButtonFormField<int>(
                       decoration: const InputDecoration(labelText: '2. Selecciona el Pedido', border: OutlineInputBorder()),
-                      value: _idPedidoSeleccionado,
+                      value: _idPedidoSeleccionado != null && _pedidosDeLaSemana.any((p) => p['id'] == _idPedidoSeleccionado) 
+                          ? _idPedidoSeleccionado 
+                          : null,
                       isExpanded: true,
+                      hint: Text(_pedidosDeLaSemana.isEmpty ? 'Selecciona primero una semana' : 'Selecciona un pedido'),
                       items: _pedidosDeLaSemana.map((p) {
                         String numPed = p['numero_pedido']?.toString() ?? p['id'].toString();
                         return DropdownMenuItem<int>(
@@ -2627,7 +2640,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                           child: Text('Pedido #$numPed', style: const TextStyle(fontSize: 14))
                         );
                       }).toList(),
-                      onChanged: _semanaSeleccionada == null ? null : (val) {
+                      onChanged: _semanaSeleccionada == null || _pedidosDeLaSemana.isEmpty ? null : (val) {
                         if (val != null) {
                           _seleccionarPedido(val);
                         }
