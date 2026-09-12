@@ -1914,7 +1914,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   DateTime? _fechaInicio;
   DateTime? _fechaFin;
   
-  // Variables para la nueva gestión de entregas semanales
   List<String> _semanasDisponibles = [];
   String? _semanaSeleccionada;
   String _clienteSeleccionadoInfo = '';  
@@ -1939,56 +1938,30 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     super.dispose();
   }
 
-  // --- LÓGICA DE AGRUPACIÓN POR SEMANAS ---
+  // --- LÓGICA DE AGRUPACIÓN POR SEMANAS GUARDADAS ---
   
-  String _obtenerRangoSemana(DateTime fecha) {
-    int diasRestar = fecha.weekday - 1; // Lunes es 1
-    DateTime lunes = fecha.subtract(Duration(days: diasRestar));
-    DateTime domingo = lunes.add(const Duration(days: 6));
-    return 'Del ${DateFormat('dd/MM/yy').format(lunes)} al ${DateFormat('dd/MM/yy').format(domingo)}';
-  }
-
   Future<void> _cargarSemanas() async {
     final db = await DatabaseHelper.instance.database;
-    final pedidos = await db.query('pedidos', columns: ['fecha']);
+    // Consulta los valores únicos de la columna semana
+    final result = await db.rawQuery('SELECT DISTINCT semana FROM pedidos WHERE semana IS NOT NULL AND semana != ""');
     
-    Set<String> semanasSet = {};
-    for (var p in pedidos) {
-      String? fechaStr = p['fecha']?.toString();
-      if (fechaStr != null && fechaStr.isNotEmpty) {
-        try {
-          DateTime fecha = DateFormat('dd-MM-yy').parse(fechaStr.split(' ')[0]);
-          semanasSet.add(_obtenerRangoSemana(fecha));
-        } catch (e) {
-          // Ignorar fechas mal formateadas
-        }
-      }
-    }
+    List<String> semanas = result.map((e) => e['semana'].toString()).toList();
+    semanas.sort((a, b) => b.compareTo(a)); // Ordena las semanas de la más reciente a la más antigua
     
     setState(() {
-      _semanasDisponibles = semanasSet.toList()..sort((a, b) => b.compareTo(a)); 
+      _semanasDisponibles = semanas;
     });
   }
 
   Future<void> _cargarPedidosPorSemana(String semana) async {
     final db = await DatabaseHelper.instance.database;
-    final todosLosPedidos = await db.query('pedidos', orderBy: 'id ASC');
-    
-    List<Map<String, dynamic>> filtrados = [];
-    
-    for (var p in todosLosPedidos) {
-      String? fechaStr = p['fecha']?.toString();
-      if (fechaStr != null && fechaStr.isNotEmpty) {
-        try {
-          DateTime fecha = DateFormat('dd-MM-yy').parse(fechaStr.split(' ')[0]);
-          if (_obtenerRangoSemana(fecha) == semana) {
-            filtrados.add(p);
-          }
-        } catch (e) {
-          // Ignorar
-        }
-      }
-    }
+    // Filtra los pedidos usando la semana seleccionada
+    final filtrados = await db.query(
+      'pedidos', 
+      where: 'semana = ?', 
+      whereArgs: [semana], 
+      orderBy: 'id ASC'
+    );
     
     setState(() {
       _pedidosDeLaSemana = filtrados;
@@ -2056,6 +2029,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       const SnackBar(content: Text('¡Datos de entrega guardados exitosamente!'), backgroundColor: Colors.green),
     );
     
+    // Recargar los pedidos y limpiar los campos de pantalla
     if (_semanaSeleccionada != null) {
       await _cargarPedidosPorSemana(_semanaSeleccionada!);
     }
@@ -2067,14 +2041,16 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     try {
       Directory? directorio;
       if (Platform.isAndroid) {
-        directorio = Directory('/storage/emulated/0/Download');
+        // Ruta de descargas que solicitaste
+        directorio = Directory('/storage/emulated/0/download');
         if (!await directorio.exists()) {
-          directorio = await getExternalStorageDirectory();
+          // Fallback por si la carpeta no existe
+          await directorio.create(recursive: true);
         }
       } else {
         directorio = await getApplicationDocumentsDirectory();
       }
-      final ruta = '${directorio!.path}/$nombreArchivo';
+      final ruta = '${directorio.path}/$nombreArchivo';
       final archivo = File(ruta);
       await archivo.writeAsBytes(await pdf.save());
       
@@ -2273,7 +2249,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         },
       ),
     );
-    await _guardarYCompartirPdf(pdf, 'Reporte_General_${DateTime.now().millisecondsSinceEpoch}.pdf');
+    await _guardarYCompartirPdf(pdf, 'Reporte_General.pdf');
   }
 
   Future<void> _generarPdfProductosVendidos() async {
@@ -2413,7 +2389,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         },
       ),
     );
-    await _guardarYCompartirPdf(pdf, 'Reporte_Productos_${DateTime.now().millisecondsSinceEpoch}.pdf');
+    await _guardarYCompartirPdf(pdf, 'Reporte_Productos.pdf');
   }
 
   Future<void> _generarPdfReporteEntregaSemanal() async {
@@ -2513,7 +2489,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         },
       ),
     );
-    await _guardarYCompartirPdf(pdf, 'Reporte_Entregas_${DateTime.now().millisecondsSinceEpoch}.pdf');
+    
+    String sufijoSemana = _semanaSeleccionada?.replaceAll(' ', '_') ?? 'Semanal';
+    await _guardarYCompartirPdf(pdf, 'Reporte_Entregas_$sufijoSemana.pdf');
   }
   
   @override
