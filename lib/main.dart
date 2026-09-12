@@ -1940,22 +1940,39 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
 
   // --- LÓGICA DE AGRUPACIÓN POR SEMANAS GUARDADAS ---
   
-  Future<void> _cargarSemanas() async {
+Future<void> _cargarSemanas() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final result = await db.rawQuery('SELECT DISTINCT semana FROM pedidos WHERE semana IS NOT NULL AND semana != ""');
       
-      List<String> semanas = result.map((e) => e['semana'].toString()).toList();
+      // Hacemos una consulta general para ver qué campos o registros existen
+      final result = await db.rawQuery('SELECT DISTINCT semana FROM pedidos');
+      print('DEBUG - Semanas encontradas en BD: $result'); // Revisa tu consola de depuración (Run/Debug console)
+      
+      List<String> semanas = [];
+      for (var e in result) {
+        String? sem = e['semana']?.toString();
+        if (sem != null && sem.trim().isNotEmpty && sem != 'null') {
+          semanas.add(sem);
+        }
+      }
+      
       semanas.sort((a, b) => b.compareTo(a)); 
       
       setState(() {
         _semanasDisponibles = semanas;
-        // Validación de seguridad para destrabar el Dropdown
         if (!_semanasDisponibles.contains(_semanaSeleccionada)) {
           _semanaSeleccionada = null;
         }
       });
     } catch (e) {
+      print('DEBUG - Error cargando semanas: $e');
+      setState(() {
+        _semanasDisponibles = [];
+        _semanaSeleccionada = null;
+      });
+    }
+  }
+  catch (e) {
       // Por si la columna aún no existe o hay error en la base de datos
       setState(() {
         _semanasDisponibles = [];
