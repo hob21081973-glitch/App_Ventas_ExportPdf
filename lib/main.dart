@@ -1125,7 +1125,7 @@ class _VistaHistorialPedidosState extends State<VistaHistorialPedidos> {
           ),
           if (detalleComentario.isNotEmpty)
             pw.Padding(
-              padding: pw.EdgeInsets.only(left: codigoProd.isNotEmpty ? (codigoProd.length * 5.0) + 12.0 : 0.0, top: 2.0),
+              padding: pw.EdgeInsets.only(left: codigoProd.isNotEmpty ? (codigoProd.length * 8.0) + 12.0 : 0.0, top: 2.0),
               child: pw.Text(
                 detalleComentario,
                 style: const pw.TextStyle(
@@ -2312,7 +2312,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         widgetsContenido.add(
           pw.Padding(
             padding: const pw.EdgeInsets.only(left: 10),
-            child: pw.Text(comentario, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+            child: pw.Text(comentario, style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
           ),
         );
       }
@@ -2360,20 +2360,20 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
                     pw.Text(
-                      "Reporte Gral de Productos Vendidos",
+                      "Reporte Gral Productos Vendidos",
                       style: pw.TextStyle(
-                        fontSize: 14,
+                        fontSize: 13,
                         fontWeight: pw.FontWeight.bold,
                       ),
                     ),
                     if (_fechaInicio != null && _fechaFin != null)
                       pw.Text(
                         'Del: ${DateFormat('dd/MM/yy').format(_fechaInicio!)} al ${DateFormat('dd/MM/yy').format(_fechaFin!)}',
-                        style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                        style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
                       ),
                     pw.Text(
                       "Fecha: ${DateFormat('dd/MM/yy').format(DateTime.now())}",
-                      style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+                      style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey600),
                     ),
                   ],
                 ),
@@ -2385,9 +2385,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             pw.Table(
               border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
               columnWidths: {
-                0: const pw.FlexColumnWidth(4.5),
+                0: const pw.FlexColumnWidth(5.5),
                 1: const pw.FlexColumnWidth(1.5),
-                2: const pw.FlexColumnWidth(2.0),
+                2: const pw.FlexColumnWidth(1.5),
               },
               children: [
                 pw.TableRow(
@@ -2395,7 +2395,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                   children: [
                     pw.Padding(
                       padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                      child: pw.Text('NOMBRE DEL PRODUCTO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10)),
+                      child: pw.Text('NOMBRE DEL PRODUCTO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),textAlign: pw.TextAlign.center),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -2434,7 +2434,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     String nombre = 'Reporte_Productos_${DateTime.now().millisecondsSinceEpoch}.pdf';
     await _guardarYCompartirPdf(pdf, nombre);
   }
-  
+  // Aqui genera el Pdf del Reporte General Por Cliente
   Future<void> _generarPdfReporteGeneralPorCliente() async {
     final db = await DatabaseHelper.instance.database;
     final pedidos = await db.query('pedidos', orderBy: 'id ASC');
