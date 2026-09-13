@@ -1943,9 +1943,10 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   Future<void> _cargarSemanas() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final result = await db.rawQuery('SELECT DISTINCT semana FROM pedidos WHERE semana IS NOT NULL AND semana != ""');
+      // Cambiamos 'semana' por 'bloque' que es como se guardan en el historial
+      final result = await db.rawQuery('SELECT DISTINCT bloque FROM pedidos WHERE bloque IS NOT NULL AND bloque != ""');
       
-      List<String> semanas = result.map((e) => e['semana'].toString()).toList();
+      List<String> semanas = result.map((e) => e['bloque'].toString()).toList();
       semanas.sort((a, b) => b.compareTo(a)); 
       
       setState(() {
@@ -1964,9 +1965,10 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
 
   Future<void> _cargarPedidosPorSemana(String semana) async {
     final db = await DatabaseHelper.instance.database;
+    // Buscamos filtrando por la columna 'bloque'
     final filtrados = await db.query(
       'pedidos', 
-      where: 'semana = ?', 
+      where: 'bloque = ?', 
       whereArgs: [semana], 
       orderBy: 'id ASC'
     );
@@ -1977,7 +1979,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       _limpiarCamposEntrega();
     });
   }
-
   void _limpiarCamposEntrega() {
     _facturadoController.clear();
     _entregadoController.clear();
