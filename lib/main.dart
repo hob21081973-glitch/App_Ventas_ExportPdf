@@ -2783,10 +2783,10 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                         Expanded(
                           child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors candlesticksColors: Colors.green, // wait
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12)
-                            ),
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
                             onPressed: _idPedidoSeleccionado == null ? null : _guardarDatosEntrega,
                             icon: const Icon(Icons.save),
                             label: const Text('Guardar Entrega'),
