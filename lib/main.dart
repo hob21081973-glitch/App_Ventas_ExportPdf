@@ -128,6 +128,41 @@ class DatabaseHelper {
     });
   }
 }
+
+// ==========================================
+// MODELOS DE DATOS (Order y WeekGroup)
+// ==========================================
+
+class Order {
+  final String id;
+  final String clientCode;
+  final String clientName;
+  final double totalAmount;
+  double deliveryValue; // Valor editable para la entrega
+  String comments;      // Comentarios de la entrega
+
+  Order({
+    required this.id,
+    required this.clientCode,
+    required this.clientName,
+    required this.totalAmount,
+    double? deliveryValue,
+    this.comments = '',
+  }) : deliveryValue = deliveryValue ?? totalAmount; // Preliminarmente toma el valor del pedido
+}
+
+class WeekGroup {
+  final String weekName;
+  final List<Order> orders;
+
+  WeekGroup({
+    required this.weekName,
+    required this.orders,
+  });
+}
+
+//==================================================FIN
+
 // ==========================================
 // MENÚ PRINCIPAL CON PESTAÑAS
 // ==========================================
@@ -1900,7 +1935,243 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
     );
   }
 }
+// ==========================================
+// WIDGET DE EXPORTACIÓN A PDF (ExportPdfTab)
+// ==========================================
 
+class ExportPdfTab extends StatefulWidget {
+  final List<WeekGroup> savedWeeks; // Lista de semanas guardadas desde el Historial
+
+  const ExportPdfTab({Key? key, required this.savedWeeks}) : super(key: key);
+
+  @override
+  _ExportPdfTabState createState() => _ExportPdfTabState();
+}
+
+class _ExportPdfTabState extends State<ExportPdfTab> {
+  String? selectedWeek;
+  Order? selectedOrder;
+
+  // Controladores para los campos editables
+  final TextEditingController _deliveryValueController = TextEditingController();
+  final TextEditingController _commentsController = TextEditingController();
+
+  // Control de habilitación del selector de semana
+  bool isWeekSelectorEnabled = true;
+
+  @override
+  void dispose() {
+    _deliveryValueController.dispose();
+    _commentsController.dispose();
+    super.dispose();
+  }
+
+  // Obtener la lista de pedidos de la semana seleccionada
+  List<Order> get currentOrders {
+    if (selectedWeek == null) return [];
+    final week = widget.savedWeeks.firstWhere(
+      (w) => w.weekName == selectedWeek,
+      orElse: () => WeekGroup(weekName: '', orders: []),
+    );
+    return week.orders;
+  }
+
+  // Al seleccionar la semana
+  void _onWeekChanged(String? newWeek) {
+    setState(() {
+      selectedWeek = newWeek;
+      selectedOrder = null; // Reinicia el pedido
+      _clearFields();
+    });
+  }
+
+  // Al seleccionar un pedido específico
+  void _onOrderChanged(Order? newOrder) {
+    setState(() {
+      selectedOrder = newOrder;
+      if (newOrder != null) {
+        // Inicializa los campos editables con los valores actuales del pedido
+        _deliveryValueController.text = newOrder.deliveryValue.toString();
+        _commentsController.text = newOrder.comments;
+      } else {
+        _clearFields();
+      }
+    });
+  }
+
+  void _clearFields() {
+    _deliveryValueController.clear();
+    _commentsController.clear();
+  }
+
+  // Botón GUARDAR: Guarda cambios y limpia el selector de pedidos
+  void _saveChanges() {
+    if (selectedOrder == null) return;
+
+    // Actualiza los datos en el objeto del pedido
+    selectedOrder!.deliveryValue = double.tryParse(_deliveryValueController.text) ?? selectedOrder!.totalAmount;
+    selectedOrder!.comments = _commentsController.text;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Cambios guardados correctamente.')),
+    );
+
+    setState(() {
+      // Limpia el selector de pedidos para la siguiente búsqueda de pedido
+      selectedOrder = null;
+      _clearFields();
+    });
+  }
+
+  // Botón EXPORTAR A PDF: Genera el PDF y reinicia el flujo habilitando la semana
+  void _exportToPdf() {
+    // TODO: Agrega aquí tu lógica existente para generar y exportar el PDF con los datos actualizados.
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Exportación a PDF realizada con éxito.')),
+    );
+
+    setState(() {
+      // Vuelve a habilitar el selector de semana y limpia selecciones
+      isWeekSelectorEnabled = true;
+      selectedWeek = null;
+      selectedOrder = null;
+      _clearFields();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: ListView(
+        children: [
+          // 1. Selector de Semana (Llama a la semana guardada)
+          DropdownButtonFormField<String>(
+            decoration: const InputDecoration(
+              labelText: 'Seleccionar Semana',
+              border: OutlineInputBorder(),
+            ),
+            value: selectedWeek,
+            items: isWeekSelectorEnabled
+                ? widget.savedWeeks.map((week) {
+                    return DropdownMenuItem<String>(
+                      value: week.weekName,
+                      child: Text(week.weekName),
+                    );
+                  }).toList()
+                : null,
+            onChanged: isWeekSelectorEnabled ? _onWeekChanged : null,
+          ),
+          const SizedBox(height: 16),
+
+          // 2. Selector de Pedidos (Trae los pedidos guardados con ese nombre de semana)
+          DropdownButtonFormField<Order>(
+            decoration: const InputDecoration(
+              labelText: 'Seleccionar Pedido',
+              border: OutlineInputBorder(),
+            ),
+            value: selectedOrder,
+            items: currentOrders.map((order) {
+              return DropdownMenuItem<Order>(
+                value: order,
+                child: Text('Pedido #${order.id} - ${order.clientName}'),
+              );
+            }).toList(),
+            onChanged: selectedWeek != null ? _onOrderChanged : null,
+          ),
+          const SizedBox(height: 24),
+
+          // Mostrar campos una vez seleccionado un pedido
+          if (selectedOrder != null) ...[
+            // Código y nombre del cliente (Solo lectura)
+            TextFormField(
+              initialValue: '${selectedOrder!.clientCode} - ${selectedOrder!.clientName}',
+              decoration: const InputDecoration(
+                labelText: 'Código y Nombre del Cliente',
+                border: OutlineInputBorder(),
+              ),
+              readOnly: true,
+            ),
+            const SizedBox(height: 16),
+
+            // Cantidad total del pedido (Solo lectura)
+            TextFormField(
+              initialValue: selectedOrder!.totalAmount.toStringAsFixed(2),
+              decoration: const InputDecoration(
+                labelText: 'Cantidad Total del Pedido',
+                border: OutlineInputBorder(),
+              ),
+              readOnly: true,
+            ),
+            const SizedBox(height: 16),
+
+            // Datos entrega (Preliminarmente valor del pedido, pero modificable)
+            TextFormField(
+              controller: _deliveryValueController,
+              decoration: const InputDecoration(
+                labelText: 'Datos de Entrega (Modificable)',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+
+            // Comentarios respectivos a la entrega
+            TextFormField(
+              controller: _commentsController,
+              decoration: const InputDecoration(
+                labelText: 'Comentarios de la Entrega',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 24),
+
+            // Botones de acción
+            Row(
+              children: [
+                // Botón Guardar
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _saveChanges,
+                    icon: const Icon(Icons.save),
+                    label: const Text('Guardar'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                
+                // Botón Exportar a PDF
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        isWeekSelectorEnabled = false; 
+                      });
+                      _exportToPdf();
+                    },
+                    icon: const Icon(Icons.picture_as_pdf),
+                    label: const Text('Exportar a PDF'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+//FINAL DEL AGREGADO
 // ==========================================
 // 7. PESTAÑA: EXPORTAR PDF (RANGOS DE FECHAS + LIMPIEZA AL GUARDAR)
 // ==========================================
@@ -2820,274 +3091,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ==========================================
-// MODELOS DE DATOS (Order y WeekGroup)
-// ==========================================
-
-class Order {
-  final String id;
-  final String clientCode;
-  final String clientName;
-  final double totalAmount;
-  double deliveryValue; // Valor editable para la entrega
-  String comments;      // Comentarios de la entrega
-
-  Order({
-    required this.id,
-    required this.clientCode,
-    required this.clientName,
-    required this.totalAmount,
-    double? deliveryValue,
-    this.comments = '',
-  }) : deliveryValue = deliveryValue ?? totalAmount; // Preliminarmente toma el valor del pedido
-}
-
-class WeekGroup {
-  final String weekName;
-  final List<Order> orders;
-
-  WeekGroup({
-    required this.weekName,
-    required this.orders,
-  });
-}
-
-// ==========================================
-// WIDGET DE EXPORTACIÓN A PDF (ExportPdfTab)
-// ==========================================
-
-class ExportPdfTab extends StatefulWidget {
-  final List<WeekGroup> savedWeeks; // Lista de semanas guardadas desde el Historial
-
-  const ExportPdfTab({Key? key, required this.savedWeeks}) : super(key: key);
-
-  @override
-  _ExportPdfTabState createState() => _ExportPdfTabState();
-}
-
-class _ExportPdfTabState extends State<ExportPdfTab> {
-  String? selectedWeek;
-  Order? selectedOrder;
-
-  // Controladores para los campos editables
-  final TextEditingController _deliveryValueController = TextEditingController();
-  final TextEditingController _commentsController = TextEditingController();
-
-  // Control de habilitación del selector de semana
-  bool isWeekSelectorEnabled = true;
-
-  @override
-  void dispose() {
-    _deliveryValueController.dispose();
-    _commentsController.dispose();
-    super.dispose();
-  }
-
-  // Obtener la lista de pedidos de la semana seleccionada
-  List<Order> get currentOrders {
-    if (selectedWeek == null) return [];
-    final week = widget.savedWeeks.firstWhere(
-      (w) => w.weekName == selectedWeek,
-      orElse: () => WeekGroup(weekName: '', orders: []),
-    );
-    return week.orders;
-  }
-
-  // Al seleccionar la semana
-  void _onWeekChanged(String? newWeek) {
-    setState(() {
-      selectedWeek = newWeek;
-      selectedOrder = null; // Reinicia el pedido
-      _clearFields();
-    });
-  }
-
-  // Al seleccionar un pedido específico
-  void _onOrderChanged(Order? newOrder) {
-    setState(() {
-      selectedOrder = newOrder;
-      if (newOrder != null) {
-        // Inicializa los campos editables con los valores actuales del pedido
-        _deliveryValueController.text = newOrder.deliveryValue.toString();
-        _commentsController.text = newOrder.comments;
-      } else {
-        _clearFields();
-      }
-    });
-  }
-
-  void _clearFields() {
-    _deliveryValueController.clear();
-    _commentsController.clear();
-  }
-
-  // Botón GUARDAR: Guarda cambios y limpia el selector de pedidos
-  void _saveChanges() {
-    if (selectedOrder == null) return;
-
-    // Actualiza los datos en el objeto del pedido
-    selectedOrder!.deliveryValue = double.tryParse(_deliveryValueController.text) ?? selectedOrder!.totalAmount;
-    selectedOrder!.comments = _commentsController.text;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Cambios guardados correctamente.')),
-    );
-
-    setState(() {
-      // Limpia el selector de pedidos para la siguiente búsqueda de pedido
-      selectedOrder = null;
-      _clearFields();
-    });
-  }
-
-  // Botón EXPORTAR A PDF: Genera el PDF y reinicia el flujo habilitando la semana
-  void _exportToPdf() {
-    // TODO: Agrega aquí tu lógica existente para generar y exportar el PDF con los datos actualizados.
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Exportación a PDF realizada con éxito.')),
-    );
-
-    setState(() {
-      // Vuelve a habilitar el selector de semana y limpia selecciones
-      isWeekSelectorEnabled = true;
-      selectedWeek = null;
-      selectedOrder = null;
-      _clearFields();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: ListView(
-        children: [
-          // 1. Selector de Semana (Llama a la semana guardada)
-          DropdownButtonFormField<String>(
-            decoration: const InputDecoration(
-              labelText: 'Seleccionar Semana',
-              border: OutlineInputBorder(),
-            ),
-            value: selectedWeek,
-            items: isWeekSelectorEnabled
-                ? widget.savedWeeks.map((week) {
-                    return DropdownMenuItem<String>(
-                      value: week.weekName,
-                      child: Text(week.weekName),
-                    );
-                  }).toList()
-                : null,
-            onChanged: isWeekSelectorEnabled ? _onWeekChanged : null,
-          ),
-          const SizedBox(height: 16),
-
-          // 2. Selector de Pedidos (Trae los pedidos guardados con ese nombre de semana)
-          DropdownButtonFormField<Order>(
-            decoration: const InputDecoration(
-              labelText: 'Seleccionar Pedido',
-              border: OutlineInputBorder(),
-            ),
-            value: selectedOrder,
-            items: currentOrders.map((order) {
-              return DropdownMenuItem<Order>(
-                value: order,
-                child: Text('Pedido #${order.id} - ${order.clientName}'),
-              );
-            }).toList(),
-            onChanged: selectedWeek != null ? _onOrderChanged : null,
-          ),
-          const SizedBox(height: 24),
-
-          // Mostrar campos una vez seleccionado un pedido
-          if (selectedOrder != null) ...[
-            // Código y nombre del cliente (Solo lectura)
-            TextFormField(
-              initialValue: '${selectedOrder!.clientCode} - ${selectedOrder!.clientName}',
-              decoration: const InputDecoration(
-                labelText: 'Código y Nombre del Cliente',
-                border: OutlineInputBorder(),
-              ),
-              readOnly: true,
-            ),
-            const SizedBox(height: 16),
-
-            // Cantidad total del pedido (Solo lectura)
-            TextFormField(
-              initialValue: selectedOrder!.totalAmount.toStringAsFixed(2),
-              decoration: const InputDecoration(
-                labelText: 'Cantidad Total del Pedido',
-                border: OutlineInputBorder(),
-              ),
-              readOnly: true,
-            ),
-            const SizedBox(height: 16),
-
-            // Datos entrega (Preliminarmente valor del pedido, pero modificable)
-            TextFormField(
-              controller: _deliveryValueController,
-              decoration: const InputDecoration(
-                labelText: 'Datos de Entrega (Modificable)',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 16),
-
-            // Comentarios respectivos a la entrega
-            TextFormField(
-              controller: _commentsController,
-              decoration: const InputDecoration(
-                labelText: 'Comentarios de la Entrega',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 24),
-
-            // Botones de acción
-            Row(
-              children: [
-                // Botón Guardar
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _saveChanges,
-                    icon: const Icon(Icons.save),
-                    label: const Text('Guardar'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                
-                // Botón Exportar a PDF
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        isWeekSelectorEnabled = false; 
-                      });
-                      _exportToPdf();
-                    },
-                    icon: const Icon(Icons.picture_as_pdf),
-                    label: const Text('Exportar a PDF'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
       ),
     );
   }
