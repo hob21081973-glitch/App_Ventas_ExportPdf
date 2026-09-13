@@ -1900,8 +1900,9 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
     );
   }
 }
+
 // ==========================================
-// 7. PESTAÑA: EXPORTAR PDF (ACTUALIZADO CON SEMANA BLOQUEADA Y HISTORIAL)
+// 7. PESTAÑA: EXPORTAR PDF
 // ==========================================
 class VistaExportarPdf extends StatefulWidget {
   const VistaExportarPdf({super.key});
@@ -1909,10 +1910,12 @@ class VistaExportarPdf extends StatefulWidget {
   @override
   State<VistaExportarPdf> createState() => _VistaExportarPdfState();
 }
+
 class _VistaExportarPdfState extends State<VistaExportarPdf> {
   DateTime? _fechaInicio;
   DateTime? _fechaFin;
   
+  // Variables para la nueva gestión de entregas semanales
   List<String> _semanasDisponibles = [];
   String? _semanaSeleccionada;
   String _clienteSeleccionadoInfo = '';  
@@ -1922,6 +1925,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   final TextEditingController _facturadoController = TextEditingController();
   final TextEditingController _entregadoController = TextEditingController();
   final TextEditingController _comentarioController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -1935,39 +1939,57 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     _comentarioController.dispose();
     super.dispose();
   }
-  // --- LÓGICA DE AGRUPACIÓN POR SEMANAS GUARDADAS ---
+
+  // --- LÓGICA DE AGRUPACIÓN POR SEMANAS ---
   
+  String _obtenerRangoSemana(DateTime fecha) {
+    int diasRestar = fecha.weekday - 1; // Lunes es 1
+    DateTime lunes = fecha.subtract(Duration(days: diasRestar));
+    DateTime domingo = lunes.add(const Duration(days: 6));
+    return 'Del ${DateFormat('dd/MM/yy').format(lunes)} al ${DateFormat('dd/MM/yy').format(domingo)}';
+  }
+
   Future<void> _cargarSemanas() async {
     final db = await DatabaseHelper.instance.database;
-    // Usamos 'bloque' que es el nombre correcto de la columna
-    final result = await db.rawQuery('SELECT DISTINCT bloque FROM pedidos WHERE bloque IS NOT NULL AND bloque != ""');
+    final pedidos = await db.query('pedidos', columns: ['fecha']);
     
-    List<String> semanas = result.map((e) => e['bloque'].toString()).toList();
-    semanas.sort((a, b) => b.compareTo(a)); // Ordena de más reciente a más antigua
+    Set<String> semanasSet = {};
+    for (var p in pedidos) {
+      String? fechaStr = p['fecha']?.toString();
+      if (fechaStr != null && fechaStr.isNotEmpty) {
+        try {
+          DateTime fecha = DateFormat('dd-MM-yy').parse(fechaStr.split(' ')[0]);
+          semanasSet.add(_obtenerRangoSemana(fecha));
+        } catch (e) {
+          // Ignorar fechas mal formateadas
+        }
+      }
+    }
     
     setState(() {
-      _semanasDisponibles = semanas;
-      // Si hay semanas disponibles y ninguna seleccionada, seleccionamos la primera automáticamente
-      if (_semanasDisponibles.isNotEmpty && _semanaSeleccionada == null) {
-        _semanaSeleccionada = _semanasDisponibles.first;
-      }
+      _semanasDisponibles = semanasSet.toList()..sort((a, b) => b.compareTo(a)); 
     });
-
-    // Si se seleccionó una semana automáticamente, cargamos sus pedidos de una vez
-    if (_semanaSeleccionada != null) {
-      await _cargarPedidosPorSemana(_semanaSeleccionada!);
-    }
   }
 
   Future<void> _cargarPedidosPorSemana(String semana) async {
     final db = await DatabaseHelper.instance.database;
-    // Filtra los pedidos usando la columna 'bloque'
-    final filtrados = await db.query(
-      'pedidos', 
-      where: 'bloque = ?', 
-      whereArgs: [semana], 
-      orderBy: 'id ASC'
-    );
+    final todosLosPedidos = await db.query('pedidos', orderBy: 'id ASC');
+    
+    List<Map<String, dynamic>> filtrados = [];
+    
+    for (var p in todosLosPedidos) {
+      String? fechaStr = p['fecha']?.toString();
+      if (fechaStr != null && fechaStr.isNotEmpty) {
+        try {
+          DateTime fecha = DateFormat('dd-MM-yy').parse(fechaStr.split(' ')[0]);
+          if (_obtenerRangoSemana(fecha) == semana) {
+            filtrados.add(p);
+          }
+        } catch (e) {
+          // Ignorar
+        }
+      }
+    }
     
     setState(() {
       _pedidosDeLaSemana = filtrados;
@@ -1975,18 +1997,21 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       _limpiarCamposEntrega();
     });
   }
+
   void _limpiarCamposEntrega() {
     _facturadoController.clear();
     _entregadoController.clear();
     _comentarioController.clear();
     _clienteSeleccionadoInfo = '';
   }
+
   Future<void> _seleccionarPedido(int idPedido) async {
     final pedido = _pedidosDeLaSemana.firstWhere((p) => p['id'] == idPedido);
     double totalFacturado = (pedido['total'] as num?)?.toDouble() ?? 0.0;
     
     double valorEntregado = (pedido['valor_entregado'] as num?)?.toDouble() ?? totalFacturado;
     String comentario = pedido['comentario_entrega']?.toString() ?? '';
+
     String nombreClienteRaw = pedido['cliente']?.toString() ?? '';
     String codigoCliente = '';
     
@@ -2002,6 +2027,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         codigoCliente = resCliente.first['codigo']?.toString() ?? '';
       }
     }
+
     setState(() {
       _idPedidoSeleccionado = idPedido;
       _clienteSeleccionadoInfo = codigoCliente.isNotEmpty ? '[$codigoCliente] $nombreClienteRaw' : nombreClienteRaw;
@@ -2010,6 +2036,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       _comentarioController.text = comentario;
     });
   }
+
   Future<void> _guardarDatosEntrega() async {
     if (_idPedidoSeleccionado == null) return;
     
@@ -2025,6 +2052,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       where: 'id = ?',
       whereArgs: [_idPedidoSeleccionado],
     );
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('¡Datos de entrega guardados exitosamente!'), backgroundColor: Colors.green),
     );
@@ -2033,6 +2061,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       await _cargarPedidosPorSemana(_semanaSeleccionada!);
     }
   }
+
   // --- MÉTODOS DE PDF ---
   
   Future<void> _guardarYCompartirPdf(pw.Document pdf, String nombreArchivo) async {
@@ -2062,6 +2091,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       );
     }
   }
+
   Future<void> _generarPdfGeneral() async {
     final db = await DatabaseHelper.instance.database;
     String query = 'SELECT * FROM pedidos';
@@ -2246,6 +2276,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     );
     await _guardarYCompartirPdf(pdf, 'Reporte_General_${DateTime.now().millisecondsSinceEpoch}.pdf');
   }
+
   Future<void> _generarPdfProductosVendidos() async {
     final db = await DatabaseHelper.instance.database;
     String query = 'SELECT * FROM pedidos';
@@ -2385,11 +2416,13 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     );
     await _guardarYCompartirPdf(pdf, 'Reporte_Productos_${DateTime.now().millisecondsSinceEpoch}.pdf');
   }
+
   Future<void> _generarPdfReporteEntregaSemanal() async {
     if (_semanaSeleccionada == null || _pedidosDeLaSemana.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor selecciona una semana/bloque con pedidos.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor selecciona una semana con pedidos.')));
       return;
     }
+
     final db = await DatabaseHelper.instance.database;
     List<List<String>> filasReporte = [];
     double sumaTotalFacturado = 0.0;
@@ -2414,6 +2447,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       
       sumaTotalFacturado += facturado;
       sumaTotalEntregado += entregado;
+
       filasReporte.add([
         numeroPedidoFormateado,
         clienteConCodigo,
@@ -2480,9 +2514,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         },
       ),
     );
-    
-    String sufijoSemana = _semanaSeleccionada?.replaceAll(' ', '_') ?? 'Semanal';
-    await _guardarYCompartirPdf(pdf, 'Reporte_Entregas_$sufijoSemana.pdf');
+    await _guardarYCompartirPdf(pdf, 'Reporte_Entregas_${DateTime.now().millisecondsSinceEpoch}.pdf');
   }
   
   @override
@@ -2554,6 +2586,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               ),
             ),
             const SizedBox(height: 15),
+
             // --- CARD 2: REPORTE POR PRODUCTOS VENDIDOS ---
             Card(
               elevation: 3,
@@ -2588,9 +2621,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                     ),
                     const Divider(),
                     
-                    // Selector de Semana (Bloque guardado del Historial)
+                    // Selector de Semana
                     DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: '1. Selecciona la Semana / Bloque', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(labelText: '1. Selecciona la Semana', border: OutlineInputBorder()),
                       value: _semanaSeleccionada,
                       isExpanded: true,
                       items: _semanasDisponibles.map((semana) {
@@ -2641,6 +2674,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                       ),
                       const SizedBox(height: 15),
                     ],
+
                     // Cajas de texto
                     Row(
                       children: [
