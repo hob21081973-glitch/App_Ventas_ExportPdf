@@ -10,8 +10,10 @@ import 'dart:convert';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+
 // Notificador global para actualizar datos en tiempo real entre pestañas
 final ValueNotifier<int> changeNotifierPedidos = ValueNotifier<int>(0); 
+
 // URLs de Google Sheets (Reemplaza con tus enlaces CSV publicados)
 const String urlClientesCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=0&single=true&output=csv';
 const String urlProductosCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=1903712481&single=true&output=csv';
@@ -2149,14 +2151,6 @@ class _ExportPdfTabState extends State<ExportPdfTab> {
     );
   }
 }
-
-import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:intl/intl.dart';
 
 // Asegúrate de ajustar esta importación según la ubicación de tu DatabaseHelper
 import 'database_helper.dart'; 
