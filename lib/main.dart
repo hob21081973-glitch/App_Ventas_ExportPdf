@@ -1902,7 +1902,7 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
 }
 
 // ==========================================
-// 7. PESTAÑA: EXPORTAR PDF (CORREGIDA Y BLINDADA)
+// 7. PESTAÑA: EXPORTAR PDF (RANGOS DE FECHAS + LIMPIEZA AL GUARDAR)
 // ==========================================
 class VistaExportarPdf extends StatefulWidget {
   const VistaExportarPdf({super.key});
@@ -1939,51 +1939,133 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     super.dispose();
   }
 
-  // --- LÓGICA DE AGRUPACIÓN POR BLOQUES GUARDADOS ---
+  // --- LÓGICA DE AGRUPACIÓN POR RANGOS DE FECHAS (SEMANALES) ---
   Future<void> _cargarSemanas() async {
     final db = await DatabaseHelper.instance.database;
-    // Usamos 'bloque' tal como viene guardado en el historial de pedidos
-    final result = await db.rawQuery('SELECT DISTINCT bloque FROM pedidos WHERE bloque IS NOT NULL AND bloque != ""');
+    final result = await db.query('pedidos', columns: ['fecha']);
     
-    List<String> semanas = result.map((e) => e['bloque'].toString()).toList();
-    semanas.sort((a, b) => b.compareTo(a)); // Ordena del más reciente al más antiguo
+    Set<String> rangosSemanas = {};
+    
+    for (var row in result) {
+      String? fechaStr = row['fecha']?.toString();
+      if (fechaStr == null || fechaStr.isEmpty) continue;
+      
+      DateTime? fecha = _parsearFecha(fechaStr);
+      if (fecha != null) {
+        int diffToMonday = fecha.weekday - 1;
+        DateTime inicioLunes = fecha.subtract(Duration(days: diffToMonday));
+        DateTime finDomingo = inicioLunes.add(const Duration(days: 6));
+        
+        String randoStr = 'Del ${DateFormat('dd/MM/yyyy').format(inicioLunes)} al ${DateFormat('dd/MM/yyyy').format(finDomingo)}';
+        rangosSemanas.add(randoStr);
+      }
+    }
+    
+    List<String> semanas = rangosSemanas.toList();
+    semanas.sort((a, b) => b.compareTo(a)); // Más reciente primero
     
     setState(() {
       _semanasDisponibles = semanas;
-      // Seleccionamos automáticamente el primero si hay elementos disponibles
-      if (_semanasDisponibles.isNotEmpty) {
+      if (_semanasDisponibles.isNotEmpty && _semanaSeleccionada == null) {
         _semanaSeleccionada = _semanasDisponibles.first;
-      } else {
-        _semanaSeleccionada = null;
       }
     });
 
-    // Si encontramos una semana por defecto, cargamos sus pedidos inmediatamente
     if (_semanaSeleccionada != null) {
       await _cargarPedidosPorSemana(_semanaSeleccionada!);
     }
   }
 
-  Future<void> _cargarPedidosPorSemana(String semana) async {
-    final db = await DatabaseHelper.instance.database;
-    final filtrados = await db.query(
-      'pedidos', 
-      where: 'bloque = ?', 
-      whereArgs: [semana], 
-      orderBy: 'id ASC'
-    );
-    
-    setState(() {
-      _pedidosDeLaSemana = filtrados;
-      _idPedidoSeleccionado = null;
-      _limpiarCamposEntrega();
-      
-      // Seleccionamos automáticamente el primer pedido si la lista no está vacía
-      if (_pedidosDeLaSemana.isNotEmpty) {
-        _idPedidoSeleccionado = _pedidosDeLaSemana.first['id'] as int;
-        _seleccionarPedido(_idPedidoSeleccionado!);
+  DateTime? _parsearFecha(String fechaStr) {
+    try {
+      if (fechaStr.contains('-')) {
+        List<String> partes = fechaStr.split(' ');
+        String fechaPart = partes[0];
+        List<String> subPartes = fechaPart.split('-');
+        if (subPartes.length == 3) {
+          if (subPartes[0].length == 4) {
+            return DateFormat('yyyy-MM-dd').parse(fechaPart);
+          } else if (subPartes[2].length == 4) {
+            return DateFormat('dd-MM-yyyy').parse(fechaPart);
+          } else {
+            return DateFormat('dd-MM-yy').parse(fechaPart);
+          }
+        }
       }
-    });
+    } catch (_) {}
+    return DateTime.tryParse(fechaStr);
+  }
+
+  Future<void> _cargarPedidosPorSemana(String rangoSemana) async {
+    try {
+      List<String> partes = rangoSemana.split(' al ');
+      if (partes.length == 2) {
+        String inicioStr = partes[0].replaceFirst('Del ', '').trim();
+        String finStr = partes[1].trim();
+        
+        DateTime inicio = DateFormat('dd/MM/yyyy').parse(inicioStr);
+        DateTime fin = DateFormat('dd/MM/yyyy').parse(finStr);
+        DateTime finConHora = DateTime(fin.year, fin.month, fin.day, 23, 59, 59);
+        
+        final db = await DatabaseHelper.instance.database;
+        final todosLosPedidos = await db.query('pedidos', orderBy: 'id ASC');
+        
+        List<Map<String, dynamic>> filtrados = [];
+        for (var p in todosLosPedidos) {
+          String? fechaStr = p['fecha']?.toString();
+          if (fechaStr != null) {
+            DateTime? fechaP = _parsearFecha(fechaStr);
+            if (fechaP != null) {
+              if (!fechaP.isBefore(inicio) && !fechaP.isAfter(finConHora)) {
+                filtrados.add(p);
+              }
+            }
+          }
+        }
+        
+        setState(() {
+          _pedidosDeLaSemana = filtrados;
+          _idPedidoSeleccionado = null;
+          _limpiarCamposEntrega();
+        });
+      }
+    } catch (e) {
+      print('Error cargando pedidos por semana: $e');
+    }
+  }
+
+  Future<void> _recargarListaSinSeleccion(String rangoSemana) async {
+    try {
+      List<String> partes = rangoSemana.split(' al ');
+      if (partes.length == 2) {
+        String inicioStr = partes[0].replaceFirst('Del ', '').trim();
+        String finStr = partes[1].trim();
+        
+        DateTime inicio = DateFormat('dd/MM/yyyy').parse(inicioStr);
+        DateTime fin = DateFormat('dd/MM/yyyy').parse(finStr);
+        DateTime finConHora = DateTime(fin.year, fin.month, fin.day, 23, 59, 59);
+        
+        final db = await DatabaseHelper.instance.database;
+        final todosLosPedidos = await db.query('pedidos', orderBy: 'id ASC');
+        
+        List<Map<String, dynamic>> filtrados = [];
+        for (var p in todosLosPedidos) {
+          String? fechaStr = p['fecha']?.toString();
+          if (fechaStr != null) {
+            DateTime? fechaP = _parsearFecha(fechaStr);
+            if (fechaP != null) {
+              if (!fechaP.isBefore(inicio) && !fechaP.isAfter(finConHora)) {
+                filtrados.add(p);
+              }
+            }
+          }
+        }
+        
+        setState(() {
+          _pedidosDeLaSemana = filtrados;
+        });
+      }
+    } catch (_) {}
   }
 
   void _limpiarCamposEntrega() {
@@ -2044,12 +2126,18 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       const SnackBar(content: Text('¡Datos de entrega guardados exitosamente!'), backgroundColor: Colors.green),
     );
     
+    // Limpia la selección y los campos para dejar listo el selector para el siguiente pedido
+    setState(() {
+      _idPedidoSeleccionado = null;
+      _limpiarCamposEntrega();
+    });
+    
     if (_semanaSeleccionada != null) {
-      await _cargarPedidosPorSemana(_semanaSeleccionada!);
+      await _recargarListaSinSeleccion(_semanaSeleccionada!);
     }
   }
 
-  // --- MÉTODOS DE PDF (Se mantienen intactos) ---
+  // --- MÉTODOS DE PDF ---
   Future<void> _guardarYCompartirPdf(pw.Document pdf, String nombreArchivo) async {
     try {
       Directory? directorio;
@@ -2482,7 +2570,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       ),
     );
     
-    String sufijoSemana = _semanaSeleccionada?.replaceAll(' ', '_') ?? 'Semanal';
+    String sufijoSemana = _semanaSeleccionada?.replaceAll(' ', '_').replaceAll('/', '-') ?? 'Semanal';
     await _guardarYCompartirPdf(pdf, 'Reporte_Entregas_$sufijoSemana.pdf');
   }
   
@@ -2590,9 +2678,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                     ),
                     const Divider(),
                     
-                    // Selector de Semana / Bloque
+                    // Selector de Semana por Rango de Fechas
                     DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: '1. Selecciona la Semana / Bloque', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(labelText: '1. Selecciona la Semana', border: OutlineInputBorder()),
                       value: _semanaSeleccionada,
                       isExpanded: true,
                       items: _semanasDisponibles.map((semana) {
@@ -2695,7 +2783,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                         Expanded(
                           child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green, 
+                              backgroundColor: Colors candlesticksColors: Colors.green, // wait
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 12)
                             ),
