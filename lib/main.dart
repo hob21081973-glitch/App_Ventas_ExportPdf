@@ -1943,17 +1943,23 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   Future<void> _cargarSemanas() async {
     try {
       final db = await DatabaseHelper.instance.database;
+      // Consultamos los campos que usualmente almacenan la agrupación
+      final result = await db.query('pedidos', columns: ['bloque', 'semana']);
       
-      // Intentamos primero ver las columnas de la tabla para adaptarnos a tu BD
-      // Buscamos tanto en 'bloque' como en 'semana' para asegurar que encuentre el dato
-      final result = await db.rawQuery(
-        "SELECT DISTINCT bloque FROM pedidos WHERE bloque IS NOT NULL AND bloque != '' "
-        "UNION "
-        "SELECT DISTINCT semana FROM pedidos WHERE semana IS NOT NULL AND semana != ''"
-      );
+      Set<String> semanasSet = {};
+      for (var row in result) {
+        String? bloque = row['bloque']?.toString();
+        String? semana = row['semana']?.toString();
+        
+        if (bloque != null && bloque.trim().isNotEmpty) {
+          semanasSet.add(bloque.trim());
+        }
+        if (semana != null && semana.trim().isNotEmpty) {
+          semanasSet.add(semana.trim());
+        }
+      }
       
-      List<String> semanas = result.map((e) => e['bloque']?.toString() ?? '').where((s) => s.isNotEmpty).toList();
-      semanas.sort((a, b) => b.compareTo(a)); 
+      List<String> semanas = semanasSet.toList()..sort((a, b) => b.compareTo(a)); 
       
       setState(() {
         _semanasDisponibles = semanas;
@@ -1962,30 +1968,14 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         }
       });
     } catch (e) {
-      // Si ocurre cualquier detalle, intentamos un respaldo consultando la tabla completa de manera segura
-      try {
-        final db = await DatabaseHelper.instance.database;
-        final result = await db.query('pedidos', columns: ['bloque']);
-        Set<String> semanasSet = {};
-        for (var row in result) {
-          String? b = row['bloque']?.toString();
-          if (b != null && b.isNotEmpty) semanasSet.add(b);
-        }
-        setState(() {
-          _semanasDisponibles = semanasSet.toList()..sort((a, b) => b.compareTo(a));
-        });
-      } catch (_) {
-        setState(() {
-          _semanasDisponibles = [];
-          _semanaSeleccionada = null;
-        });
-      }
+      setState(() {
+        _semanasDisponibles = [];
+        _semanaSeleccionada = null;
+      });
     }
   }
-
   Future<void> _cargarPedidosPorSemana(String semana) async {
     final db = await DatabaseHelper.instance.database;
-    // Buscamos tanto si el valor está en la columna 'bloque' como en 'semana'
     final filtrados = await db.query(
       'pedidos', 
       where: 'bloque = ? OR semana = ?', 
