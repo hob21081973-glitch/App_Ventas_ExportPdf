@@ -2162,21 +2162,130 @@ class VistaExportarPdf extends StatefulWidget {
 }
 
 class _VistaExportarPdfState extends State<VistaExportarPdf> {
-  DateTime? _fechaInicio;
-  DateTime? _fechaFin;
-  int? _idPedidoSeleccionadoParaReporte;
-  
-  final TextEditingController _valorEntregadoController = TextEditingController();
-  final TextEditingController _comentarioController = TextEditingController();
+  List<Map<String, dynamic>> _listaPedidos = [];
+  bool _cargandoDatos = true;
+
+  // --- Estado para Reporte De Productos Por Pedido ---
+  int? _idPedidoSeleccionadoProductos;
+
+  // --- Estado para Gestión de Entregas y Reporte General ---
+  // Guarda: { idPedido: {'entregado': double, 'comentario': String} }
+  final Map<int, Map<String, dynamic>> _entregasProcesadas = {};
+  int? _idPedidoSeleccionadoEntrega;
+
+  final TextEditingController _montoEntregadoController = TextEditingController();
+  final TextEditingController _comentarioEntregaController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarPedidos();
+  }
 
   @override
   void dispose() {
-    _valorEntregadoController.dispose();
-    _comentarioController.dispose();
+    _montoEntregadoController.dispose();
+    _comentarioEntregaController.dispose();
     super.dispose();
   }
 
-  /// Manejo seguro de archivos PDF en almacenamiento local e interfaz de impresión
+  Future<void> _cargarPedidos() async {
+    setState(() => _cargandoDatos = true);
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final List<Map<String, dynamic>> pedidos = await db.rawQuery('''
+        SELECT 
+          p.id, 
+          p.numero_pedido, 
+          p.cliente, 
+          p.total, 
+          p.fecha,
+          c.codigo AS codigo_cliente
+        FROM pedidos p
+        LEFT JOIN clientes c ON p.cliente = c.nombre
+        ORDER BY p.id ASC
+      ''');
+
+      setState(() {
+        _listaPedidos = pedidos;
+        _cargandoDatos = false;
+      });
+    } catch (e) {
+      setState(() => _cargandoDatos = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al cargar pedidos: $e')),
+        );
+      }
+    }
+  }
+
+  // --- LÓGICA DE GESTIÓN DE ENTREGAS ---
+  void _alSeleccionarPedidoEntrega(int? idPedido) {
+    if (idPedido == null) {
+      setState(() {
+        _idPedidoSeleccionadoEntrega = null;
+        _montoEntregadoController.clear();
+        _comentarioEntregaController.clear();
+      });
+      return;
+    }
+
+    final pedido = _listaPedidos.firstWhere(
+      (p) => p['id'] == idPedido,
+      orElse: () => {},
+    );
+
+    if (pedido.isNotEmpty) {
+      double total = (pedido['total'] as num?)?.toDouble() ?? 0.0;
+
+      if (_entregasProcesadas.containsKey(idPedido)) {
+        _montoEntregadoController.text =
+            _entregasProcesadas[idPedido]!['entregado'].toString();
+        _comentarioEntregaController.text =
+            _entregasProcesadas[idPedido]!['comentario'] ?? '';
+      } else {
+        _montoEntregadoController.text = total.toStringAsFixed(2);
+        _comentarioEntregaController.clear();
+      }
+
+      setState(() {
+        _idPedidoSeleccionadoEntrega = idPedido;
+      });
+    }
+  }
+
+  void _guardarDatosEntrega() {
+    if (_idPedidoSeleccionadoEntrega == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, seleccione un pedido')),
+      );
+      return;
+    }
+
+    double valEntregado = double.tryParse(_montoEntregadoController.text) ?? 0.0;
+    String comentario = _comentarioEntregaController.text.trim();
+
+    setState(() {
+      _entregasProcesadas[_idPedidoSeleccionadoEntrega!] = {
+        'entregado': valEntregado,
+        'comentario': comentario,
+      };
+      // Se resetea la selección para que el pedido pase a la lista de procesados
+      _idPedidoSeleccionadoEntrega = null;
+      _montoEntregadoController.clear();
+      _comentarioEntregaController.clear();
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('¡Datos del pedido guardados exitosamente!'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  // --- PDF EXPORT FUNCTION ---
   Future<void> _guardarYCompartirPdf(pw.Document pdf, String nombreArchivo) async {
     try {
       final bytes = await pdf.save();
@@ -2193,28 +2302,144 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     }
   }
 
-  /// Generación del Reporte General por Cliente (Optimizado con JOIN sin problema N+1)
-  Future<void> _generarPdfReporteGeneralPorCliente() async {
-    final db = await DatabaseHelper.instance.database;
+  // 1. REPORTE DE PRODUCTOS POR PEDIDO (PDF)
+  Future<void> _generarPdfReporteProductosPorPedido() async {
+    if (_idPedidoSeleccionadoProductos == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleccione un pedido para generar el reporte')),
+      );
+      return;
+    }
 
-    // Consulta con LEFT JOIN para traer datos del cliente en una sola llamada SQL
-    final List<Map<String, dynamic>> pedidos = await db.rawQuery('''
-      SELECT 
-        p.id, 
-        p.numero_pedido, 
-        p.cliente, 
-        p.total, 
-        c.codigo AS codigo_cliente
-      FROM pedidos p
-      LEFT JOIN clientes c ON p.cliente = c.nombre
-      ORDER BY p.id ASC
-    ''');
+    final pedido = _listaPedidos.firstWhere(
+      (p) => p['id'] == _idPedidoSeleccionadoProductos,
+      orElse: () => {},
+    );
+
+    if (pedido.isEmpty) return;
+
+    final db = await DatabaseHelper.instance.database;
+    final List<Map<String, dynamic>> detalles = await db.rawQuery('''
+      SELECT nombre_producto, cantidad, precio_unitario, subtotal
+      FROM detalle_pedidos
+      WHERE pedido_id = ?
+    ''', [_idPedidoSeleccionadoProductos]);
 
     if (!mounted) return;
 
-    if (pedidos.isEmpty) {
+    String numPedRaw = pedido['numero_pedido']?.toString() ?? '';
+    int idPed = pedido['id'] as int;
+    if (numPedRaw.isEmpty) {
+      numPedRaw = 'Pedido #$idPed';
+    } else if (!numPedRaw.toLowerCase().contains('pedido')) {
+      numPedRaw = 'Pedido $numPedRaw';
+    }
+
+    String clienteNombre = pedido['cliente']?.toString() ?? '';
+    String codigoCliente = pedido['codigo_cliente']?.toString() ?? '';
+    String clienteConCodigo = codigoCliente.isNotEmpty ? '[$codigoCliente] $clienteNombre' : clienteNombre;
+    double totalPedido = (pedido['total'] as num?)?.toDouble() ?? 0.0;
+
+    List<List<String>> filasTabla = [];
+    for (var d in detalles) {
+      String prod = d['nombre_producto']?.toString() ?? 'Producto';
+      int cant = (d['cantidad'] as num?)?.toInt() ?? 0;
+      double precio = (d['precio_unitario'] as num?)?.toDouble() ?? 0.0;
+      double subtotal = (d['subtotal'] as num?)?.toDouble() ?? (cant * precio);
+
+      filasTabla.add([
+        prod,
+        cant.toString(),
+        'L. ${precio.toStringAsFixed(2)}',
+        'L. ${subtotal.toStringAsFixed(2)}',
+      ]);
+    }
+
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.all(24),
+        build: (pw.Context context) {
+          return [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text("D I C O S M O", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                    pw.Text("REPORTE DE PRODUCTOS POR PEDIDO", style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(numPedRaw, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                    pw.Text("Fecha: ${DateFormat('dd/MM/yyyy').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey200,
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Cliente: $clienteConCodigo", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  pw.Text("Total Pedido: L. ${totalPedido.toStringAsFixed(2)}", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 12),
+            pw.Table.fromTextArray(
+              headers: ['Producto / Descripción', 'Cantidad', 'Precio Unit.', 'Subtotal'],
+              data: filasTabla,
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 9),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blue900),
+              cellStyle: const pw.TextStyle(fontSize: 8),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(3.0),
+                1: const pw.FlexColumnWidth(1.0),
+                2: const pw.FlexColumnWidth(1.5),
+                3: const pw.FlexColumnWidth(1.5),
+              },
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.center,
+                2: pw.Alignment.centerRight,
+                3: pw.Alignment.centerRight,
+              },
+            ),
+            pw.SizedBox(height: 12),
+            pw.Align(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Text(
+                "Valor Total del Pedido: L. ${totalPedido.toStringAsFixed(2)}",
+                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
+              ),
+            ),
+          ];
+        },
+      ),
+    );
+
+    String nombre = 'Reporte_Productos_${numPedRaw.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    await _guardarYCompartirPdf(pdf, nombre);
+  }
+
+  // 2. REPORTE GENERAL POR CLIENTE (PDF CONSOLIDADOR)
+  Future<void> _generarPdfReporteGeneralPorCliente() async {
+    if (_listaPedidos.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay pedidos registrados en el sistema')),
+        const SnackBar(content: Text('No hay pedidos registrados para generar el reporte')),
       );
       return;
     }
@@ -2223,15 +2448,12 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     double sumaTotalPedidos = 0.0;
     double sumaTotalEntregado = 0.0;
 
-    for (var p in pedidos) {
+    for (var p in _listaPedidos) {
+      int idPedido = p['id'] as int;
       String nombreCliente = p['cliente']?.toString() ?? '';
       String codigoCliente = p['codigo_cliente']?.toString() ?? '';
+      String clienteConCodigo = codigoCliente.isNotEmpty ? '[$codigoCliente] $nombreCliente' : nombreCliente;
 
-      String clienteConCodigo = codigoCliente.isNotEmpty 
-          ? '[$codigoCliente] $nombreCliente' 
-          : nombreCliente;
-
-      int idPedido = p['id'] as int;
       String numPedRaw = p['numero_pedido']?.toString() ?? '';
       if (numPedRaw.isEmpty) {
         numPedRaw = 'Pedido #$idPedido';
@@ -2245,13 +2467,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       double valEntregado = totalPedido;
       String comentario = 'Entregado';
 
-      if (_idPedidoSeleccionadoParaReporte == idPedido) {
-        if (_valorEntregadoController.text.isNotEmpty) {
-          valEntregado = double.tryParse(_valorEntregadoController.text) ?? totalPedido;
-        }
-        if (_comentarioController.text.isNotEmpty) {
-          comentario = _comentarioController.text;
-        }
+      if (_entregasProcesadas.containsKey(idPedido)) {
+        valEntregado = _entregasProcesadas[idPedido]!['entregado'] ?? totalPedido;
+        comentario = _entregasProcesadas[idPedido]!['comentario'] ?? '';
       }
 
       sumaTotalEntregado += valEntregado;
@@ -2274,7 +2492,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         margin: const pw.EdgeInsets.all(24),
         build: (pw.Context context) {
           return [
-            // Encabezado principal
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
@@ -2308,7 +2525,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             ),
             pw.SizedBox(height: 8),
 
-            // Tarjetas de totales en encabezado
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.end,
               children: [
@@ -2323,7 +2539,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
             pw.Divider(thickness: 1, color: PdfColors.blue900),
             pw.SizedBox(height: 8),
 
-            // Tabla de Pedidos
             pw.Table.fromTextArray(
               headers: ['Pedido #', 'Cliente', 'Total Pedido', 'Total Entregado', 'Comentario'],
               data: filasReporte,
@@ -2355,118 +2570,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     await _guardarYCompartirPdf(pdf, nombre);
   }
 
-  /// Generación del Reporte de Productos Por Rango de Fechas (Formato ISO en SQL)
-  Future<void> _generarPdfReporteProductos() async {
-    if (_fechaInicio == null || _fechaFin == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleccione un rango de fechas válido')),
-      );
-      return;
-    }
-
-    final db = await DatabaseHelper.instance.database;
-
-    // Convertir a ISO 8601 para filtrado de texto léxico en SQLite
-    String inicioIso = DateFormat('yyyy-MM-dd 00:00:00').format(_fechaInicio!);
-    String finIso = DateFormat('yyyy-MM-dd 23:59:59').format(_fechaFin!);
-
-    final List<Map<String, dynamic>> items = await db.rawQuery('''
-      SELECT 
-        dp.nombre_producto, 
-        SUM(dp.cantidad) as cantidad_total, 
-        SUM(dp.subtotal) as subtotal_total
-      FROM detalle_pedidos dp
-      INNER JOIN pedidos p ON dp.pedido_id = p.id
-      WHERE p.fecha BETWEEN ? AND ?
-      GROUP BY dp.nombre_producto
-      ORDER BY cantidad_total DESC
-    ''', [inicioIso, finIso]);
-
-    if (!mounted) return;
-
-    if (items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay registros en el rango de fechas seleccionado')),
-      );
-      return;
-    }
-
-    List<List<String>> filasTabla = [];
-    double granTotal = 0.0;
-
-    for (var item in items) {
-      String nombreProd = item['nombre_producto']?.toString() ?? 'Sin nombre';
-      int cantidad = (item['cantidad_total'] as num?)?.toInt() ?? 0;
-      double subtotal = (item['subtotal_total'] as num?)?.toDouble() ?? 0.0;
-      granTotal += subtotal;
-
-      filasTabla.add([
-        nombreProd,
-        cantidad.toString(),
-        'L. ${subtotal.toStringAsFixed(2)}',
-      ]);
-    }
-
-    final pdf = pw.Document();
-    String rangoStr = "${DateFormat('dd/MM/yyyy').format(_fechaInicio!)} al ${DateFormat('dd/MM/yyyy').format(_fechaFin!)}";
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(24),
-        build: (pw.Context context) {
-          return [
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text("D I C O S M O", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-                    pw.Text("REPORTE DE PRODUCTOS VENDIDOS", style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-                  ],
-                ),
-                pw.Text("Rango: $rangoStr", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-              ],
-            ),
-            pw.SizedBox(height: 10),
-            pw.Divider(thickness: 1, color: PdfColors.blue900),
-            pw.SizedBox(height: 10),
-            pw.Table.fromTextArray(
-              headers: ['Producto', 'Cantidad Vendida', 'Total Acumulado'],
-              data: filasTabla,
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.blue900),
-              cellStyle: const pw.TextStyle(fontSize: 9),
-              columnWidths: {
-                0: const pw.FlexColumnWidth(3.0),
-                1: const pw.FlexColumnWidth(1.5),
-                2: const pw.FlexColumnWidth(1.5),
-              },
-              cellAlignments: {
-                0: pw.Alignment.centerLeft,
-                1: pw.Alignment.center,
-                2: pw.Alignment.centerRight,
-              },
-            ),
-            pw.SizedBox(height: 10),
-            pw.Align(
-              alignment: pw.Alignment.centerRight,
-              child: pw.Text(
-                "Gran Total: L. ${granTotal.toStringAsFixed(2)}",
-                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
-              ),
-            ),
-          ];
-        },
-      ),
-    );
-
-    String nombre = 'Reporte_Productos_${DateTime.now().millisecondsSinceEpoch}.pdf';
-    await _guardarYCompartirPdf(pdf, nombre);
-  }
-
-  /// Auxiliar visual para componentes en PDF
   pw.Widget _buildMetricBadge(String title, double amount) {
     return pw.Row(
       children: [
@@ -2484,134 +2587,292 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     );
   }
 
-  /// Selector de fechas de la UI
-  Future<void> _seleccionarFecha(BuildContext context, bool esInicio) async {
-    final DateTime? seleccionada = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-    );
-    if (seleccionada != null) {
-      setState(() {
-        if (esInicio) {
-          _fechaInicio = seleccionada;
-        } else {
-          _fechaFin = seleccionada;
-        }
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    // Pedidos faltantes por procesar en la entrega
+    List<Map<String, dynamic>> pedidosFaltantes = _listaPedidos.where((p) {
+      int id = p['id'] as int;
+      return !_entregasProcesadas.containsKey(id) || id == _idPedidoSeleccionadoEntrega;
+    }).toList();
+
+    // Pedido actualmente seleccionado para entregar
+    Map<String, dynamic> pedidoActualEntrega = {};
+    if (_idPedidoSeleccionadoEntrega != null) {
+      pedidoActualEntrega = _listaPedidos.firstWhere(
+        (p) => p['id'] == _idPedidoSeleccionadoEntrega,
+        orElse: () => {},
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Exportar Reportes PDF'),
         backgroundColor: Colors.blue.shade900,
         foregroundColor: Colors.white,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16.0),
-        children: [
-          // Tarjeta: Reporte General por Cliente
-          Card(
-            elevation: 3,
-            margin: const EdgeInsets.only(bottom: 16),
-            child: Padding(
+      body: _cargandoDatos
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
               padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Reporte General por Cliente',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Genera un documento consolidado de los pedidos registrados con montos totales y estados de entrega.',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue.shade900,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      onPressed: _generarPdfReporteGeneralPorCliente,
-                      icon: const Icon(Icons.picture_as_pdf),
-                      label: const Text('Generar Reporte General'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+              children: [
+                // -------------------------------------------------------------
+                // CARD 1: REPORTE DE PRODUCTOS POR PEDIDOS
+                // -------------------------------------------------------------
+                Card(
+                  elevation: 3,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Reporte De Productos Por Pedidos',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Seleccione un pedido para exportar la lista completa de sus productos con cantidades y precios.',
+                          style: TextStyle(color: Colors.grey, fontSize: 13),
+                        ),
+                        const SizedBox(height: 16),
 
-          // Tarjeta: Reporte de Productos por Fechas
-          Card(
-            elevation: 3,
-            margin: const EdgeInsets.only(bottom: 16),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Reporte de Productos por Fechas',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => _seleccionarFecha(context, true),
-                          icon: const Icon(Icons.calendar_today, size: 18),
-                          label: Text(
-                            _fechaInicio == null
-                                ? 'Fecha Inicio'
-                                : DateFormat('dd/MM/yyyy').format(_fechaInicio!),
+                        DropdownButtonFormField<int>(
+                          value: _idPedidoSeleccionadoProductos,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Seleccionar Pedido',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          ),
+                          hint: const Text('Elija un pedido de la lista'),
+                          items: _listaPedidos.map((p) {
+                            int id = p['id'] as int;
+                            String numPed = p['numero_pedido']?.toString() ?? 'Pedido #$id';
+                            String cliente = p['cliente']?.toString() ?? '';
+                            String cod = p['codigo_cliente']?.toString() ?? '';
+                            String labelCliente = cod.isNotEmpty ? '[$cod] $cliente' : cliente;
+
+                            return DropdownMenuItem<int>(
+                              value: id,
+                              child: Text(
+                                '$numPed - $labelCliente',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            setState(() {
+                              _idPedidoSeleccionadoProductos = val;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 16),
+
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.shade900,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: _generarPdfReporteProductosPorPedido,
+                            icon: const Icon(Icons.picture_as_pdf),
+                            label: const Text('Generar Reporte de Productos por Pedido'),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => _seleccionarFecha(context, false),
-                          icon: const Icon(Icons.calendar_today, size: 18),
-                          label: Text(
-                            _fechaFin == null
-                                ? 'Fecha Fin'
-                                : DateFormat('dd/MM/yyyy').format(_fechaFin!),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue.shade900,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      onPressed: _generarPdfReporteProductos,
-                      icon: const Icon(Icons.picture_as_pdf),
-                      label: const Text('Generar Reporte por Fechas'),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+
+                // -------------------------------------------------------------
+                // CARD 2: GESTIÓN DE ENTREGAS Y REPORTE GENERAL POR CLIENTE
+                // -------------------------------------------------------------
+                Card(
+                  elevation: 3,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Reporte General por Cliente',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'Procesados: ${_entregasProcesadas.length} / ${_listaPedidos.length}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade900,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Seleccione los pedidos faltantes para actualizar sus valores de entrega y comentarios antes de generar el reporte consolidado.',
+                          style: TextStyle(color: Colors.grey, fontSize: 13),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Selector de pedidos faltantes de entrega
+                        DropdownButtonFormField<int>(
+                          value: _idPedidoSeleccionadoEntrega,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Pedidos Faltantes de Entrega',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          ),
+                          hint: Text(
+                            pedidosFaltantes.isEmpty
+                                ? '¡Todos los pedidos han sido procesados!'
+                                : 'Seleccione un pedido pendiente',
+                          ),
+                          items: pedidosFaltantes.map((p) {
+                            int id = p['id'] as int;
+                            String numPed = p['numero_pedido']?.toString() ?? 'Pedido #$id';
+                            String cliente = p['cliente']?.toString() ?? '';
+                            String cod = p['codigo_cliente']?.toString() ?? '';
+                            String labelCliente = cod.isNotEmpty ? '[$cod] $cliente' : cliente;
+
+                            return DropdownMenuItem<int>(
+                              value: id,
+                              child: Text(
+                                '$numPed - $labelCliente',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: _alSeleccionarPedidoEntrega,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // VISTA DE LECTURA DE DATOS + CAJAS EDITABLES
+                        if (pedidoActualEntrega.isNotEmpty) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Datos Visuales del Pedido (Solo Lectura):',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '• Pedido #: ${pedidoActualEntrega['numero_pedido'] ?? "Pedido #${pedidoActualEntrega['id']}"}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                ),
+                                Text(
+                                  '• Cliente: ${pedidoActualEntrega['codigo_cliente'] != null && pedidoActualEntrega['codigo_cliente'].toString().isNotEmpty ? "[${pedidoActualEntrega['codigo_cliente']}] " : ""}${pedidoActualEntrega['cliente'] ?? ""}',
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                                Text(
+                                  '• Valor Total del Pedido: L. ${((pedidoActualEntrega['total'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue.shade900,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // CAJA EDITABLE: VALOR ENTREGADO
+                          TextField(
+                            controller: _montoEntregadoController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(
+                              labelText: 'Valor Total Entregado (L.)',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.attach_money),
+                              helperText: 'Modifique si el cliente entregó un monto distinto',
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // CAJA EDITABLE: COMENTARIOS
+                          TextField(
+                            controller: _comentarioEntregaController,
+                            maxLines: 2,
+                            decoration: const InputDecoration(
+                              labelText: 'Comentario / Novedad de Entrega',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.comment),
+                              hintText: 'Ej: Entregado incompleto, pago pendiente, etc.',
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // BOTÓN GUARDAR DATOS DEL PEDIDO
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green.shade800,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              onPressed: _guardarDatosEntrega,
+                              icon: const Icon(Icons.save),
+                              label: const Text('Guardar Datos del Pedido'),
+                            ),
+                          ),
+                          const Divider(height: 32, thickness: 1),
+                        ],
+
+                        // BOTÓN REPORTE GENERAL CONSOLIDADOR
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.shade900,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: _generarPdfReporteGeneralPorCliente,
+                            icon: const Icon(Icons.picture_as_pdf),
+                            label: const Text('Generar Reporte General Por Cliente'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }
