@@ -1902,7 +1902,7 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
 }
 
 // ==========================================
-// 7. PESTAÑA: EXPORTAR PDF
+// 7. PESTAÑA: EXPORTAR PDF (CORREGIDA Y BLINDADA)
 // ==========================================
 class VistaExportarPdf extends StatefulWidget {
   const VistaExportarPdf({super.key});
@@ -1915,7 +1915,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   DateTime? _fechaInicio;
   DateTime? _fechaFin;
   
-  // Variables para la nueva gestión de entregas semanales
   List<String> _semanasDisponibles = [];
   String? _semanaSeleccionada;
   String _clienteSeleccionadoInfo = '';  
@@ -1940,61 +1939,50 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     super.dispose();
   }
 
-  // --- LÓGICA DE AGRUPACIÓN POR SEMANAS ---
-  
-  String _obtenerRangoSemana(DateTime fecha) {
-    int diasRestar = fecha.weekday - 1; // Lunes es 1
-    DateTime lunes = fecha.subtract(Duration(days: diasRestar));
-    DateTime domingo = lunes.add(const Duration(days: 6));
-    return 'Del ${DateFormat('dd/MM/yy').format(lunes)} al ${DateFormat('dd/MM/yy').format(domingo)}';
-  }
-
+  // --- LÓGICA DE AGRUPACIÓN POR BLOQUES GUARDADOS ---
   Future<void> _cargarSemanas() async {
     final db = await DatabaseHelper.instance.database;
-    final pedidos = await db.query('pedidos', columns: ['fecha']);
+    // Usamos 'bloque' tal como viene guardado en el historial de pedidos
+    final result = await db.rawQuery('SELECT DISTINCT bloque FROM pedidos WHERE bloque IS NOT NULL AND bloque != ""');
     
-    Set<String> semanasSet = {};
-    for (var p in pedidos) {
-      String? fechaStr = p['fecha']?.toString();
-      if (fechaStr != null && fechaStr.isNotEmpty) {
-        try {
-          DateTime fecha = DateFormat('dd-MM-yy').parse(fechaStr.split(' ')[0]);
-          semanasSet.add(_obtenerRangoSemana(fecha));
-        } catch (e) {
-          // Ignorar fechas mal formateadas
-        }
-      }
-    }
+    List<String> semanas = result.map((e) => e['bloque'].toString()).toList();
+    semanas.sort((a, b) => b.compareTo(a)); // Ordena del más reciente al más antiguo
     
     setState(() {
-      _semanasDisponibles = semanasSet.toList()..sort((a, b) => b.compareTo(a)); 
+      _semanasDisponibles = semanas;
+      // Seleccionamos automáticamente el primero si hay elementos disponibles
+      if (_semanasDisponibles.isNotEmpty) {
+        _semanaSeleccionada = _semanasDisponibles.first;
+      } else {
+        _semanaSeleccionada = null;
+      }
     });
+
+    // Si encontramos una semana por defecto, cargamos sus pedidos inmediatamente
+    if (_semanaSeleccionada != null) {
+      await _cargarPedidosPorSemana(_semanaSeleccionada!);
+    }
   }
 
   Future<void> _cargarPedidosPorSemana(String semana) async {
     final db = await DatabaseHelper.instance.database;
-    final todosLosPedidos = await db.query('pedidos', orderBy: 'id ASC');
-    
-    List<Map<String, dynamic>> filtrados = [];
-    
-    for (var p in todosLosPedidos) {
-      String? fechaStr = p['fecha']?.toString();
-      if (fechaStr != null && fechaStr.isNotEmpty) {
-        try {
-          DateTime fecha = DateFormat('dd-MM-yy').parse(fechaStr.split(' ')[0]);
-          if (_obtenerRangoSemana(fecha) == semana) {
-            filtrados.add(p);
-          }
-        } catch (e) {
-          // Ignorar
-        }
-      }
-    }
+    final filtrados = await db.query(
+      'pedidos', 
+      where: 'bloque = ?', 
+      whereArgs: [semana], 
+      orderBy: 'id ASC'
+    );
     
     setState(() {
       _pedidosDeLaSemana = filtrados;
       _idPedidoSeleccionado = null;
       _limpiarCamposEntrega();
+      
+      // Seleccionamos automáticamente el primer pedido si la lista no está vacía
+      if (_pedidosDeLaSemana.isNotEmpty) {
+        _idPedidoSeleccionado = _pedidosDeLaSemana.first['id'] as int;
+        _seleccionarPedido(_idPedidoSeleccionado!);
+      }
     });
   }
 
@@ -2006,12 +1994,10 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   }
 
   Future<void> _seleccionarPedido(int idPedido) async {
-    final pedido = _pedidosDeLaSemana.firstWhere((p) => p['id'] == idPedido);
+    final pedido = _pedidosDeLaSemana.firstWhere((p) => p['id'] == idPedido, orElse: () => _pedidosDeLaSemana.first);
     double totalFacturado = (pedido['total'] as num?)?.toDouble() ?? 0.0;
-    
     double valorEntregado = (pedido['valor_entregado'] as num?)?.toDouble() ?? totalFacturado;
     String comentario = pedido['comentario_entrega']?.toString() ?? '';
-
     String nombreClienteRaw = pedido['cliente']?.toString() ?? '';
     String codigoCliente = '';
     
@@ -2027,7 +2013,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         codigoCliente = resCliente.first['codigo']?.toString() ?? '';
       }
     }
-
+    
     setState(() {
       _idPedidoSeleccionado = idPedido;
       _clienteSeleccionadoInfo = codigoCliente.isNotEmpty ? '[$codigoCliente] $nombreClienteRaw' : nombreClienteRaw;
@@ -2052,7 +2038,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       where: 'id = ?',
       whereArgs: [_idPedidoSeleccionado],
     );
-
+    
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('¡Datos de entrega guardados exitosamente!'), backgroundColor: Colors.green),
     );
@@ -2062,8 +2049,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
     }
   }
 
-  // --- MÉTODOS DE PDF ---
-  
+  // --- MÉTODOS DE PDF (Se mantienen intactos) ---
   Future<void> _guardarYCompartirPdf(pw.Document pdf, String nombreArchivo) async {
     try {
       Directory? directorio;
@@ -2124,20 +2110,13 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       String codigoCliente = '';
       
       if (nombreClienteRaw.isNotEmpty) {
-        final resCliente = await db.query(
-          'clientes',
-          where: 'nombre = ?',
-          whereArgs: [nombreClienteRaw],
-          limit: 1,
-        );
-        if (resCliente.isNotEmpty) {
-          codigoCliente = resCliente.first['codigo']?.toString() ?? '';
-        }
+        final resCliente = await db.query('clientes', where: 'nombre = ?', whereArgs: [nombreClienteRaw], limit: 1);
+        if (resCliente.isNotEmpty) codigoCliente = resCliente.first['codigo']?.toString() ?? '';
       }
       
       String clienteConCodigo = codigoCliente.isNotEmpty ? '[$codigoCliente] $nombreClienteRaw' : nombreClienteRaw;
-      
       List<pw.Widget> widgetsProductosPedido = [];
+      
       try {
         String prodStr = p['productos_json']?.toString() ?? '';
         if (prodStr.isNotEmpty) {
@@ -2162,21 +2141,14 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               detalleComentario = nombreProd.substring(bracketStart + 1, bracketEnd).trim();
               nombreProd = nombreProd.substring(0, bracketStart).trim();
             }
-            String codigoProd = '';
-            final resProd = await db.query(
-              'productos',
-              where: 'nombre = ?',
-              whereArgs: [nombreProd],
-              limit: 1,
-            );
-            if (resProd.isNotEmpty) {
-              codigoProd = resProd.first['codigo']?.toString() ?? '';
-            }
-            String prodConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
             
-            widgetsProductosPedido.add(
-              pw.Text('[   ] $prodConCodigo (x$cantidad)', style: const pw.TextStyle(fontSize: 9)),
-            );
+            String codigoProd = '';
+            final resProd = await db.query('productos', where: 'nombre = ?', whereArgs: [nombreProd], limit: 1);
+            if (resProd.isNotEmpty) codigoProd = resProd.first['codigo']?.toString() ?? '';
+            
+            String prodConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
+            widgetsProductosPedido.add(pw.Text('[   ] $prodConCodigo (x$cantidad)', style: const pw.TextStyle(fontSize: 9)));
+            
             if (detalleComentario.isNotEmpty) {
               widgetsProductosPedido.add(
                 pw.Padding(
@@ -2188,18 +2160,15 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
           }
         }
       } catch (_) {
-        widgetsProductosPedido.add(
-          pw.Text(p['productos_json']?.toString() ?? '', style: const pw.TextStyle(fontSize: 9)),
-        );
+        widgetsProductosPedido.add(pw.Text(p['productos_json']?.toString() ?? '', style: const pw.TextStyle(fontSize: 9)));
       }
       
       String numPedRaw = p['numero_pedido']?.toString() ?? '';
       if (numPedRaw.isEmpty) numPedRaw = p['id']?.toString() ?? '';
       String numLimpio = numPedRaw.replaceAll('Pedido', '').replaceAll('#', '').trim();
-      String numeroPedidoFormateado = 'Pedido $numLimpio';
       
       filasReporteWidgets.add([
-        pw.Text(numeroPedidoFormateado, style: const pw.TextStyle(fontSize: 9)),
+        pw.Text('Pedido $numLimpio', style: const pw.TextStyle(fontSize: 9)),
         pw.Text(clienteConCodigo, style: const pw.TextStyle(fontSize: 9)),
         pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: widgetsProductosPedido),
         pw.Text("L. ${totalPedido.toStringAsFixed(2)}", style: const pw.TextStyle(fontSize: 9)),
@@ -2419,10 +2388,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
 
   Future<void> _generarPdfReporteEntregaSemanal() async {
     if (_semanaSeleccionada == null || _pedidosDeLaSemana.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor selecciona una semana con pedidos.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor selecciona una semana/bloque con pedidos.')));
       return;
     }
-
     final db = await DatabaseHelper.instance.database;
     List<List<String>> filasReporte = [];
     double sumaTotalFacturado = 0.0;
@@ -2447,7 +2415,6 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
       
       sumaTotalFacturado += facturado;
       sumaTotalEntregado += entregado;
-
       filasReporte.add([
         numeroPedidoFormateado,
         clienteConCodigo,
@@ -2514,7 +2481,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
         },
       ),
     );
-    await _guardarYCompartirPdf(pdf, 'Reporte_Entregas_${DateTime.now().millisecondsSinceEpoch}.pdf');
+    
+    String sufijoSemana = _semanaSeleccionada?.replaceAll(' ', '_') ?? 'Semanal';
+    await _guardarYCompartirPdf(pdf, 'Reporte_Entregas_$sufijoSemana.pdf');
   }
   
   @override
@@ -2586,7 +2555,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
               ),
             ),
             const SizedBox(height: 15),
-
+            
             // --- CARD 2: REPORTE POR PRODUCTOS VENDIDOS ---
             Card(
               elevation: 3,
@@ -2621,9 +2590,9 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                     ),
                     const Divider(),
                     
-                    // Selector de Semana
+                    // Selector de Semana / Bloque
                     DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: '1. Selecciona la Semana', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(labelText: '1. Selecciona la Semana / Bloque', border: OutlineInputBorder()),
                       value: _semanaSeleccionada,
                       isExpanded: true,
                       items: _semanasDisponibles.map((semana) {
@@ -2650,7 +2619,7 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                           child: Text('Pedido #$numPed', style: const TextStyle(fontSize: 14))
                         );
                       }).toList(),
-                      onChanged: _semanaSeleccionada == null ? null : (val) {
+                      onChanged: _semanasDisponibles.isEmpty ? null : (val) {
                         if (val != null) {
                           _seleccionarPedido(val);
                         }
@@ -2674,8 +2643,8 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
                       ),
                       const SizedBox(height: 15),
                     ],
-
-                    // Cajas de texto
+                    
+                    // Cajas de texto de totales
                     Row(
                       children: [
                         Expanded(
