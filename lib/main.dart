@@ -1964,7 +1964,8 @@ Future<void> _cargarSemanas() async {
           _semanaSeleccionada = null;
         }
       });
-    } catch (e) {
+    } 
+    catch (e) {
       print('DEBUG - Error cargando semanas: $e');
       setState(() {
         _semanasDisponibles = [];
