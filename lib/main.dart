@@ -1935,7 +1935,9 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
     );
   }
 }
-
+//===============================================
+// VISTA EXPORTAR A PDF
+//===============================================
 class ExportPdfTab extends StatefulWidget {
   final List<WeekGroup> savedWeeks;
 
@@ -2144,6 +2146,479 @@ class _ExportPdfTabState extends State<ExportPdfTab> {
           ),
         ),
       ],
+    );
+  }
+}
+
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:intl/intl.dart';
+
+// Asegúrate de ajustar esta importación según la ubicación de tu DatabaseHelper
+import 'database_helper.dart'; 
+
+class VistaExportarPdf extends StatefulWidget {
+  const VistaExportarPdf({Key? key}) : super(key: key);
+
+  @override
+  State<VistaExportarPdf> createState() => _VistaExportarPdfState();
+}
+
+class _VistaExportarPdfState extends State<VistaExportarPdf> {
+  DateTime? _fechaInicio;
+  DateTime? _fechaFin;
+  int? _idPedidoSeleccionadoParaReporte;
+  
+  final TextEditingController _valorEntregadoController = TextEditingController();
+  final TextEditingController _comentarioController = TextEditingController();
+
+  @override
+  void dispose() {
+    _valorEntregadoController.dispose();
+    _comentarioController.dispose();
+    super.dispose();
+  }
+
+  /// Manejo seguro de archivos PDF en almacenamiento local e interfaz de impresión
+  Future<void> _guardarYCompartirPdf(pw.Document pdf, String nombreArchivo) async {
+    try {
+      final bytes = await pdf.save();
+      final outputDir = await getTemporaryDirectory();
+      final file = File('${outputDir.path}/$nombreArchivo');
+      await file.writeAsBytes(bytes);
+
+      await Printing.sharePdf(bytes: bytes, filename: nombreArchivo);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al exportar PDF: $e')),
+      );
+    }
+  }
+
+  /// Generación del Reporte General por Cliente (Optimizado con JOIN sin problema N+1)
+  Future<void> _generarPdfReporteGeneralPorCliente() async {
+    final db = await DatabaseHelper.instance.database;
+
+    // Consulta con LEFT JOIN para traer datos del cliente en una sola llamada SQL
+    final List<Map<String, dynamic>> pedidos = await db.rawQuery('''
+      SELECT 
+        p.id, 
+        p.numero_pedido, 
+        p.cliente, 
+        p.total, 
+        c.codigo AS codigo_cliente
+      FROM pedidos p
+      LEFT JOIN clientes c ON p.cliente = c.nombre
+      ORDER BY p.id ASC
+    ''');
+
+    if (!mounted) return;
+
+    if (pedidos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay pedidos registrados en el sistema')),
+      );
+      return;
+    }
+
+    List<List<String>> filasReporte = [];
+    double sumaTotalPedidos = 0.0;
+    double sumaTotalEntregado = 0.0;
+
+    for (var p in pedidos) {
+      String nombreCliente = p['cliente']?.toString() ?? '';
+      String codigoCliente = p['codigo_cliente']?.toString() ?? '';
+
+      String clienteConCodigo = codigoCliente.isNotEmpty 
+          ? '[$codigoCliente] $nombreCliente' 
+          : nombreCliente;
+
+      int idPedido = p['id'] as int;
+      String numPedRaw = p['numero_pedido']?.toString() ?? '';
+      if (numPedRaw.isEmpty) {
+        numPedRaw = 'Pedido #$idPedido';
+      } else if (!numPedRaw.toLowerCase().contains('pedido')) {
+        numPedRaw = 'Pedido $numPedRaw';
+      }
+
+      double totalPedido = (p['total'] as num?)?.toDouble() ?? 0.0;
+      sumaTotalPedidos += totalPedido;
+
+      double valEntregado = totalPedido;
+      String comentario = 'Entregado';
+
+      if (_idPedidoSeleccionadoParaReporte == idPedido) {
+        if (_valorEntregadoController.text.isNotEmpty) {
+          valEntregado = double.tryParse(_valorEntregadoController.text) ?? totalPedido;
+        }
+        if (_comentarioController.text.isNotEmpty) {
+          comentario = _comentarioController.text;
+        }
+      }
+
+      sumaTotalEntregado += valEntregado;
+
+      filasReporte.add([
+        numPedRaw,
+        clienteConCodigo,
+        'L. ${totalPedido.toStringAsFixed(2)}',
+        'L. ${valEntregado.toStringAsFixed(2)}',
+        comentario.isEmpty ? '-' : comentario,
+      ]);
+    }
+
+    double diferenciaTotal = sumaTotalPedidos - sumaTotalEntregado;
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.all(24),
+        build: (pw.Context context) {
+          return [
+            // Encabezado principal
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      "D I C O S M O",
+                      style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
+                    ),
+                    pw.Text(
+                      "PRODUCTOS CHAMER MEDICAMENTOS UTILES ESCOLARES NOVEDADES Y MAS",
+                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      "REPORTE GRAL POR CLIENTE",
+                      style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.Text(
+                      "Fecha: ${DateFormat('dd/MM/yy').format(DateTime.now())}",
+                      style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 8),
+
+            // Tarjetas de totales en encabezado
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.end,
+              children: [
+                _buildMetricBadge('Total Pedido:', sumaTotalPedidos),
+                pw.SizedBox(width: 6),
+                _buildMetricBadge('Total Entregado:', sumaTotalEntregado),
+                pw.SizedBox(width: 6),
+                _buildMetricBadge('Diferencia:', diferenciaTotal),
+              ],
+            ),
+            pw.SizedBox(height: 8),
+            pw.Divider(thickness: 1, color: PdfColors.blue900),
+            pw.SizedBox(height: 8),
+
+            // Tabla de Pedidos
+            pw.Table.fromTextArray(
+              headers: ['Pedido #', 'Cliente', 'Total Pedido', 'Total Entregado', 'Comentario'],
+              data: filasReporte,
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 9),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blue900),
+              cellStyle: const pw.TextStyle(fontSize: 8),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(1.2),
+                1: const pw.FlexColumnWidth(2.5),
+                2: const pw.FlexColumnWidth(1.4),
+                3: const pw.FlexColumnWidth(1.4),
+                4: const pw.FlexColumnWidth(2.0),
+              },
+              cellAlignments: {
+                0: pw.Alignment.center,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.centerRight,
+                3: pw.Alignment.centerRight,
+                4: pw.Alignment.centerLeft,
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    String nombre = 'Reporte_General_Por_Cliente_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    await _guardarYCompartirPdf(pdf, nombre);
+  }
+
+  /// Generación del Reporte de Productos Por Rango de Fechas (Formato ISO en SQL)
+  Future<void> _generarPdfReporteProductos() async {
+    if (_fechaInicio == null || _fechaFin == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleccione un rango de fechas válido')),
+      );
+      return;
+    }
+
+    final db = await DatabaseHelper.instance.database;
+
+    // Convertir a ISO 8601 para filtrado de texto léxico en SQLite
+    String inicioIso = DateFormat('yyyy-MM-dd 00:00:00').format(_fechaInicio!);
+    String finIso = DateFormat('yyyy-MM-dd 23:59:59').format(_fechaFin!);
+
+    final List<Map<String, dynamic>> items = await db.rawQuery('''
+      SELECT 
+        dp.nombre_producto, 
+        SUM(dp.cantidad) as cantidad_total, 
+        SUM(dp.subtotal) as subtotal_total
+      FROM detalle_pedidos dp
+      INNER JOIN pedidos p ON dp.pedido_id = p.id
+      WHERE p.fecha BETWEEN ? AND ?
+      GROUP BY dp.nombre_producto
+      ORDER BY cantidad_total DESC
+    ''', [inicioIso, finIso]);
+
+    if (!mounted) return;
+
+    if (items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay registros en el rango de fechas seleccionado')),
+      );
+      return;
+    }
+
+    List<List<String>> filasTabla = [];
+    double granTotal = 0.0;
+
+    for (var item in items) {
+      String nombreProd = item['nombre_producto']?.toString() ?? 'Sin nombre';
+      int cantidad = (item['cantidad_total'] as num?)?.toInt() ?? 0;
+      double subtotal = (item['subtotal_total'] as num?)?.toDouble() ?? 0.0;
+      granTotal += subtotal;
+
+      filasTabla.add([
+        nombreProd,
+        cantidad.toString(),
+        'L. ${subtotal.toStringAsFixed(2)}',
+      ]);
+    }
+
+    final pdf = pw.Document();
+    String rangoStr = "${DateFormat('dd/MM/yyyy').format(_fechaInicio!)} al ${DateFormat('dd/MM/yyyy').format(_fechaFin!)}";
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.all(24),
+        build: (pw.Context context) {
+          return [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text("D I C O S M O", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                    pw.Text("REPORTE DE PRODUCTOS VENDIDOS", style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                  ],
+                ),
+                pw.Text("Rango: $rangoStr", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+            pw.Divider(thickness: 1, color: PdfColors.blue900),
+            pw.SizedBox(height: 10),
+            pw.Table.fromTextArray(
+              headers: ['Producto', 'Cantidad Vendida', 'Total Acumulado'],
+              data: filasTabla,
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blue900),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(3.0),
+                1: const pw.FlexColumnWidth(1.5),
+                2: const pw.FlexColumnWidth(1.5),
+              },
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.center,
+                2: pw.Alignment.centerRight,
+              },
+            ),
+            pw.SizedBox(height: 10),
+            pw.Align(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Text(
+                "Gran Total: L. ${granTotal.toStringAsFixed(2)}",
+                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
+              ),
+            ),
+          ];
+        },
+      ),
+    );
+
+    String nombre = 'Reporte_Productos_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    await _guardarYCompartirPdf(pdf, nombre);
+  }
+
+  /// Auxiliar visual para componentes en PDF
+  pw.Widget _buildMetricBadge(String title, double amount) {
+    return pw.Row(
+      children: [
+        pw.Text(title, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(width: 2),
+        pw.Container(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: PdfColors.grey700),
+            borderRadius: pw.BorderRadius.circular(4),
+          ),
+          child: pw.Text('L. ${amount.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+        ),
+      ],
+    );
+  }
+
+  /// Selector de fechas de la UI
+  Future<void> _seleccionarFecha(BuildContext context, bool esInicio) async {
+    final DateTime? seleccionada = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+    if (seleccionada != null) {
+      setState(() {
+        if (esInicio) {
+          _fechaInicio = seleccionada;
+        } else {
+          _fechaFin = seleccionada;
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Exportar Reportes PDF'),
+        backgroundColor: Colors.blue.shade900,
+        foregroundColor: Colors.white,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16.0),
+        children: [
+          // Tarjeta: Reporte General por Cliente
+          Card(
+            elevation: 3,
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Reporte General por Cliente',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Genera un documento consolidado de los pedidos registrados con montos totales y estados de entrega.',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade900,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: _generarPdfReporteGeneralPorCliente,
+                      icon: const Icon(Icons.picture_as_pdf),
+                      label: const Text('Generar Reporte General'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Tarjeta: Reporte de Productos por Fechas
+          Card(
+            elevation: 3,
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Reporte de Productos por Fechas',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _seleccionarFecha(context, true),
+                          icon: const Icon(Icons.calendar_today, size: 18),
+                          label: Text(
+                            _fechaInicio == null
+                                ? 'Fecha Inicio'
+                                : DateFormat('dd/MM/yyyy').format(_fechaInicio!),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _seleccionarFecha(context, false),
+                          icon: const Icon(Icons.calendar_today, size: 18),
+                          label: Text(
+                            _fechaFin == null
+                                ? 'Fecha Fin'
+                                : DateFormat('dd/MM/yyyy').format(_fechaFin!),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade900,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: _generarPdfReporteProductos,
+                      icon: const Icon(Icons.picture_as_pdf),
+                      label: const Text('Generar Reporte por Fechas'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
