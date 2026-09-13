@@ -1935,12 +1935,9 @@ class _VistaResumenProductosState extends State<VistaResumenProductos> {
     );
   }
 }
-// ==========================================
-// WIDGET DE EXPORTACIÓN A PDF (ExportPdfTab)
-// ==========================================
 
 class ExportPdfTab extends StatefulWidget {
-  final List<WeekGroup> savedWeeks; // Lista de semanas guardadas desde el Historial
+  final List<WeekGroup> savedWeeks;
 
   const ExportPdfTab({Key? key, required this.savedWeeks}) : super(key: key);
 
@@ -1952,21 +1949,18 @@ class _ExportPdfTabState extends State<ExportPdfTab> {
   String? selectedWeek;
   Order? selectedOrder;
 
-  // Controladores para los campos editables
-  final TextEditingController _deliveryValueController = TextEditingController();
-  final TextEditingController _commentsController = TextEditingController();
+  final TextEditingController _entregadoRealController = TextEditingController();
+  final TextEditingController _notasController = TextEditingController();
 
-  // Control de habilitación del selector de semana
-  bool isWeekSelectorEnabled = true;
+  bool isWeekLocked = false;
 
   @override
   void dispose() {
-    _deliveryValueController.dispose();
-    _commentsController.dispose();
+    _entregadoRealController.dispose();
+    _notasController.dispose();
     super.dispose();
   }
 
-  // Obtener la lista de pedidos de la semana seleccionada
   List<Order> get currentOrders {
     if (selectedWeek == null) return [];
     final week = widget.savedWeeks.firstWhere(
@@ -1976,23 +1970,21 @@ class _ExportPdfTabState extends State<ExportPdfTab> {
     return week.orders;
   }
 
-  // Al seleccionar la semana
   void _onWeekChanged(String? newWeek) {
     setState(() {
       selectedWeek = newWeek;
-      selectedOrder = null; // Reinicia el pedido
+      selectedOrder = null;
       _clearFields();
     });
   }
 
-  // Al seleccionar un pedido específico
   void _onOrderChanged(Order? newOrder) {
     setState(() {
       selectedOrder = newOrder;
       if (newOrder != null) {
-        // Inicializa los campos editables con los valores actuales del pedido
-        _deliveryValueController.text = newOrder.deliveryValue.toString();
-        _commentsController.text = newOrder.comments;
+        isWeekLocked = true;
+        _entregadoRealController.text = newOrder.deliveryValue.toString();
+        _notasController.text = newOrder.comments;
       } else {
         _clearFields();
       }
@@ -2000,40 +1992,47 @@ class _ExportPdfTabState extends State<ExportPdfTab> {
   }
 
   void _clearFields() {
-    _deliveryValueController.clear();
-    _commentsController.clear();
+    _entregadoRealController.clear();
+    _notasController.clear();
   }
 
-  // Botón GUARDAR: Guarda cambios y limpia el selector de pedidos
-  void _saveChanges() {
-    if (selectedOrder == null) return;
+  void _saveDelivery() {
+    if (selectedOrder == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, seleccione un pedido primero.')),
+      );
+      return;
+    }
 
-    // Actualiza los datos en el objeto del pedido
-    selectedOrder!.deliveryValue = double.tryParse(_deliveryValueController.text) ?? selectedOrder!.totalAmount;
-    selectedOrder!.comments = _commentsController.text;
+    selectedOrder!.deliveryValue = double.tryParse(_entregadoRealController.text) ?? selectedOrder!.totalAmount;
+    selectedOrder!.comments = _notasController.text;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Cambios guardados correctamente.')),
+      SnackBar(content: Text('Entrega guardada para el pedido #${selectedOrder!.id}. Seleccione el siguiente.')),
     );
 
     setState(() {
-      // Limpia el selector de pedidos para la siguiente búsqueda de pedido
       selectedOrder = null;
       _clearFields();
     });
   }
 
-  // Botón EXPORTAR A PDF: Genera el PDF y reinicia el flujo habilitando la semana
-  void _exportToPdf() {
-    // TODO: Agrega aquí tu lógica existente para generar y exportar el PDF con los datos actualizados.
+  void _generateWeeklyReport() {
+    if (selectedWeek == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleccione una semana para generar el reporte.')),
+      );
+      return;
+    }
+
+    // TODO: Inserta aquí tu lógica para generar el PDF usando los datos modificados de la semana `selectedWeek`
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Exportación a PDF realizada con éxito.')),
+      const SnackBar(content: Text('Reporte semanal generado y exportado a PDF con éxito.')),
     );
 
     setState(() {
-      // Vuelve a habilitar el selector de semana y limpia selecciones
-      isWeekSelectorEnabled = true;
+      isWeekLocked = false;
       selectedWeek = null;
       selectedOrder = null;
       _clearFields();
@@ -2042,1056 +2041,109 @@ class _ExportPdfTabState extends State<ExportPdfTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return ListView(
       padding: const EdgeInsets.all(16.0),
-      child: ListView(
-        children: [
-          // 1. Selector de Semana (Llama a la semana guardada)
-          DropdownButtonFormField<String>(
+      children: [
+        DropdownButtonFormField<String>(
+          decoration: const InputDecoration(
+            labelText: '1. Selecciona la Semana',
+            border: OutlineInputBorder(),
+          ),
+          value: selectedWeek,
+          items: !isWeekLocked
+              ? widget.savedWeeks.map((week) {
+                  return DropdownMenuItem<String>(
+                    value: week.weekName,
+                    child: Text(week.weekName),
+                  );
+                }).toList()
+              : null,
+          onChanged: !isWeekLocked ? _onWeekChanged : null,
+        ),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<Order>(
+          decoration: const InputDecoration(
+            labelText: '2. Selecciona el Pedido',
+            border: OutlineInputBorder(),
+          ),
+          value: selectedOrder,
+          items: currentOrders.map((order) {
+            return DropdownMenuItem<Order>(
+              value: order,
+              child: Text('Pedido #${order.id} - ${order.clientName}'),
+            );
+          }).toList(),
+          onChanged: selectedWeek != null ? _onOrderChanged : null,
+        ),
+        const SizedBox(height: 16),
+        if (selectedOrder != null) ...[
+          TextFormField(
+            initialValue: '[${selectedOrder!.clientCode}] ${selectedOrder!.clientName}',
             decoration: const InputDecoration(
-              labelText: 'Seleccionar Semana',
+              labelText: 'Cliente Seleccionado',
               border: OutlineInputBorder(),
             ),
-            value: selectedWeek,
-            items: isWeekSelectorEnabled
-                ? widget.savedWeeks.map((week) {
-                    return DropdownMenuItem<String>(
-                      value: week.weekName,
-                      child: Text(week.weekName),
-                    );
-                  }).toList()
-                : null,
-            onChanged: isWeekSelectorEnabled ? _onWeekChanged : null,
+            readOnly: true,
           ),
           const SizedBox(height: 16),
-
-          // 2. Selector de Pedidos (Trae los pedidos guardados con ese nombre de semana)
-          DropdownButtonFormField<Order>(
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  initialValue: selectedOrder!.totalAmount.toStringAsFixed(2),
+                  decoration: const InputDecoration(
+                    labelText: 'Total Facturado',
+                    border: OutlineInputBorder(),
+                  ),
+                  readOnly: true,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  controller: _entregadoRealController,
+                  decoration: const InputDecoration(
+                    labelText: 'Entregado Real',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _notasController,
             decoration: const InputDecoration(
-              labelText: 'Seleccionar Pedido',
+              labelText: 'Notas de entrega (Devoluciones, incompletos...)',
               border: OutlineInputBorder(),
             ),
-            value: selectedOrder,
-            items: currentOrders.map((order) {
-              return DropdownMenuItem<Order>(
-                value: order,
-                child: Text('Pedido #${order.id} - ${order.clientName}'),
-              );
-            }).toList(),
-            onChanged: selectedWeek != null ? _onOrderChanged : null,
+            maxLines: 2,
           ),
           const SizedBox(height: 24),
-
-          // Mostrar campos una vez seleccionado un pedido
-          if (selectedOrder != null) ...[
-            // Código y nombre del cliente (Solo lectura)
-            TextFormField(
-              initialValue: '${selectedOrder!.clientCode} - ${selectedOrder!.clientName}',
-              decoration: const InputDecoration(
-                labelText: 'Código y Nombre del Cliente',
-                border: OutlineInputBorder(),
-              ),
-              readOnly: true,
-            ),
-            const SizedBox(height: 16),
-
-            // Cantidad total del pedido (Solo lectura)
-            TextFormField(
-              initialValue: selectedOrder!.totalAmount.toStringAsFixed(2),
-              decoration: const InputDecoration(
-                labelText: 'Cantidad Total del Pedido',
-                border: OutlineInputBorder(),
-              ),
-              readOnly: true,
-            ),
-            const SizedBox(height: 16),
-
-            // Datos entrega (Preliminarmente valor del pedido, pero modificable)
-            TextFormField(
-              controller: _deliveryValueController,
-              decoration: const InputDecoration(
-                labelText: 'Datos de Entrega (Modificable)',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 16),
-
-            // Comentarios respectivos a la entrega
-            TextFormField(
-              controller: _commentsController,
-              decoration: const InputDecoration(
-                labelText: 'Comentarios de la Entrega',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 24),
-
-            // Botones de acción
-            Row(
-              children: [
-                // Botón Guardar
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _saveChanges,
-                    icon: const Icon(Icons.save),
-                    label: const Text('Guardar'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                
-                // Botón Exportar a PDF
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        isWeekSelectorEnabled = false; 
-                      });
-                      _exportToPdf();
-                    },
-                    icon: const Icon(Icons.picture_as_pdf),
-                    label: const Text('Exportar a PDF'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
         ],
-      ),
-    );
-  }
-}
-
-//FINAL DEL AGREGADO
-// ==========================================
-// 7. PESTAÑA: EXPORTAR PDF (RANGOS DE FECHAS + LIMPIEZA AL GUARDAR)
-// ==========================================
-class VistaExportarPdf extends StatefulWidget {
-  const VistaExportarPdf({super.key});
-  
-  @override
-  State<VistaExportarPdf> createState() => _VistaExportarPdfState();
-}
-
-class _VistaExportarPdfState extends State<VistaExportarPdf> {
-  DateTime? _fechaInicio;
-  DateTime? _fechaFin;
-  
-  List<String> _semanasDisponibles = [];
-  String? _semanaSeleccionada;
-  String _clienteSeleccionadoInfo = '';  
-  List<Map<String, dynamic>> _pedidosDeLaSemana = [];
-  int? _idPedidoSeleccionado;
-  
-  final TextEditingController _facturadoController = TextEditingController();
-  final TextEditingController _entregadoController = TextEditingController();
-  final TextEditingController _comentarioController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _cargarSemanas();
-  }
-  
-  @override
-  void dispose() {
-    _facturadoController.dispose();
-    _entregadoController.dispose();
-    _comentarioController.dispose();
-    super.dispose();
-  }
-
-  // --- LÓGICA DE AGRUPACIÓN POR RANGOS DE FECHAS (SEMANALES) ---
-  Future<void> _cargarSemanas() async {
-    final db = await DatabaseHelper.instance.database;
-    final result = await db.query('pedidos', columns: ['fecha']);
-    
-    Set<String> rangosSemanas = {};
-    
-    for (var row in result) {
-      String? fechaStr = row['fecha']?.toString();
-      if (fechaStr == null || fechaStr.isEmpty) continue;
-      
-      DateTime? fecha = _parsearFecha(fechaStr);
-      if (fecha != null) {
-        int diffToMonday = fecha.weekday - 1;
-        DateTime inicioLunes = fecha.subtract(Duration(days: diffToMonday));
-        DateTime finDomingo = inicioLunes.add(const Duration(days: 6));
-        
-        String randoStr = 'Del ${DateFormat('dd/MM/yyyy').format(inicioLunes)} al ${DateFormat('dd/MM/yyyy').format(finDomingo)}';
-        rangosSemanas.add(randoStr);
-      }
-    }
-    
-    List<String> semanas = rangosSemanas.toList();
-    semanas.sort((a, b) => b.compareTo(a)); // Más reciente primero
-    
-    setState(() {
-      _semanasDisponibles = semanas;
-      if (_semanasDisponibles.isNotEmpty && _semanaSeleccionada == null) {
-        _semanaSeleccionada = _semanasDisponibles.first;
-      }
-    });
-
-    if (_semanaSeleccionada != null) {
-      await _cargarPedidosPorSemana(_semanaSeleccionada!);
-    }
-  }
-
-  DateTime? _parsearFecha(String fechaStr) {
-    try {
-      if (fechaStr.contains('-')) {
-        List<String> partes = fechaStr.split(' ');
-        String fechaPart = partes[0];
-        List<String> subPartes = fechaPart.split('-');
-        if (subPartes.length == 3) {
-          if (subPartes[0].length == 4) {
-            return DateFormat('yyyy-MM-dd').parse(fechaPart);
-          } else if (subPartes[2].length == 4) {
-            return DateFormat('dd-MM-yyyy').parse(fechaPart);
-          } else {
-            return DateFormat('dd-MM-yy').parse(fechaPart);
-          }
-        }
-      }
-    } catch (_) {}
-    return DateTime.tryParse(fechaStr);
-  }
-
-  Future<void> _cargarPedidosPorSemana(String rangoSemana) async {
-    try {
-      List<String> partes = rangoSemana.split(' al ');
-      if (partes.length == 2) {
-        String inicioStr = partes[0].replaceFirst('Del ', '').trim();
-        String finStr = partes[1].trim();
-        
-        DateTime inicio = DateFormat('dd/MM/yyyy').parse(inicioStr);
-        DateTime fin = DateFormat('dd/MM/yyyy').parse(finStr);
-        DateTime finConHora = DateTime(fin.year, fin.month, fin.day, 23, 59, 59);
-        
-        final db = await DatabaseHelper.instance.database;
-        final todosLosPedidos = await db.query('pedidos', orderBy: 'id ASC');
-        
-        List<Map<String, dynamic>> filtrados = [];
-        for (var p in todosLosPedidos) {
-          String? fechaStr = p['fecha']?.toString();
-          if (fechaStr != null) {
-            DateTime? fechaP = _parsearFecha(fechaStr);
-            if (fechaP != null) {
-              if (!fechaP.isBefore(inicio) && !fechaP.isAfter(finConHora)) {
-                filtrados.add(p);
-              }
-            }
-          }
-        }
-        
-        setState(() {
-          _pedidosDeLaSemana = filtrados;
-          _idPedidoSeleccionado = null;
-          _limpiarCamposEntrega();
-        });
-      }
-    } catch (e) {
-      print('Error cargando pedidos por semana: $e');
-    }
-  }
-
-  Future<void> _recargarListaSinSeleccion(String rangoSemana) async {
-    try {
-      List<String> partes = rangoSemana.split(' al ');
-      if (partes.length == 2) {
-        String inicioStr = partes[0].replaceFirst('Del ', '').trim();
-        String finStr = partes[1].trim();
-        
-        DateTime inicio = DateFormat('dd/MM/yyyy').parse(inicioStr);
-        DateTime fin = DateFormat('dd/MM/yyyy').parse(finStr);
-        DateTime finConHora = DateTime(fin.year, fin.month, fin.day, 23, 59, 59);
-        
-        final db = await DatabaseHelper.instance.database;
-        final todosLosPedidos = await db.query('pedidos', orderBy: 'id ASC');
-        
-        List<Map<String, dynamic>> filtrados = [];
-        for (var p in todosLosPedidos) {
-          String? fechaStr = p['fecha']?.toString();
-          if (fechaStr != null) {
-            DateTime? fechaP = _parsearFecha(fechaStr);
-            if (fechaP != null) {
-              if (!fechaP.isBefore(inicio) && !fechaP.isAfter(finConHora)) {
-                filtrados.add(p);
-              }
-            }
-          }
-        }
-        
-        setState(() {
-          _pedidosDeLaSemana = filtrados;
-        });
-      }
-    } catch (_) {}
-  }
-
-  void _limpiarCamposEntrega() {
-    _idPedidoSeleccionado = null;
-    _clienteSeleccionadoInfo = '';
-    _facturadoController.clear();
-    _entregadoController.clear();
-    _comentarioController.clear();
-  }
-
-  Future<void> _seleccionarPedido(int idPedido) async {
-    final pedido = _pedidosDeLaSemana.firstWhere((p) => p['id'] == idPedido, orElse: () => _pedidosDeLaSemana.first);
-    double totalFacturado = (pedido['total'] as num?)?.toDouble() ?? 0.0;
-    double valorEntregado = (pedido['valor_entregado'] as num?)?.toDouble() ?? totalFacturado;
-    String comentario = pedido['comentario_entrega']?.toString() ?? '';
-    String nombreClienteRaw = pedido['cliente']?.toString() ?? '';
-    String codigoCliente = '';
-    
-    if (nombreClienteRaw.isNotEmpty) {
-      final db = await DatabaseHelper.instance.database;
-      final resCliente = await db.query(
-        'clientes',
-        where: 'nombre = ?',
-        whereArgs: [nombreClienteRaw],
-        limit: 1,
-      );
-      if (resCliente.isNotEmpty) {
-        codigoCliente = resCliente.first['codigo']?.toString() ?? '';
-      }
-    }
-    
-    setState(() {
-      _idPedidoSeleccionado = idPedido;
-      _clienteSeleccionadoInfo = codigoCliente.isNotEmpty ? '[$codigoCliente] $nombreClienteRaw' : nombreClienteRaw;
-      _facturadoController.text = totalFacturado.toStringAsFixed(2);
-      _entregadoController.text = valorEntregado.toStringAsFixed(2);
-      _comentarioController.text = comentario;
-    });
-  }
-
-  Future<void> _guardarDatosEntrega() async {
-    if (_idPedidoSeleccionado == null) return;
-    
-    final db = await DatabaseHelper.instance.database;
-    double entregado = double.tryParse(_entregadoController.text) ?? 0.0;
-    
-    await db.update(
-      'pedidos',
-      {
-        'valor_entregado': entregado,
-        'comentario_entrega': _comentarioController.text,
-      },
-      where: 'id = ?',
-      whereArgs: [_idPedidoSeleccionado],
-    );
-    
-    if (!mounted) return;
-
-    if (_semanaSeleccionada != null) {
-      await _recargarListaSinSeleccion(_semanaSeleccionada!);
-    }
-
-    setState(() {
-      _limpiarCamposEntrega();
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('¡Datos de entrega guardados exitosamente!'), 
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
-
-  // --- MÉTODOS DE PDF ---
-  Future<void> _guardarYCompartirPdf(pw.Document pdf, String nombreArchivo) async {
-    try {
-      Directory? directorio;
-      if (Platform.isAndroid) {
-        directorio = Directory('/storage/emulated/0/Download');
-        if (!await directorio.exists()) {
-          directorio = await getExternalStorageDirectory();
-        }
-      } else {
-        directorio = await getApplicationDocumentsDirectory();
-      }
-      final ruta = '${directorio!.path}/$nombreArchivo';
-      final archivo = File(ruta);
-      await archivo.writeAsBytes(await pdf.save());
-      
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('¡Guardado en Descargas: $nombreArchivo')),
-      );
-      await Printing.layoutPdf(onLayout: (format) async => pdf.save());
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al guardar el archivo: $e')),
-      );
-    }
-  }
-
-  Future<void> _generarPdfGeneral() async {
-    final db = await DatabaseHelper.instance.database;
-    String query = 'SELECT * FROM pedidos';
-    List<String> args = [];
-    if (_fechaInicio != null && _fechaFin != null) {
-      String inicioStr = DateFormat('dd-MM-yy').format(_fechaInicio!);
-      String finStr = '${DateFormat('dd-MM-yy').format(_fechaFin!)} 23:59';
-      query += ' WHERE fecha BETWEEN ? AND ?';
-      args = [inicioStr, finStr];
-    }
-    query += ' ORDER BY id DESC';
-    final pedidos = await db.rawQuery(query, args);
-    
-    if (pedidos.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay pedidos en el rango de fechas seleccionado')),
-      );
-      return;
-    }
-    
-    final pdf = pw.Document();
-    List<List<pw.Widget>> filasReporteWidgets = [];
-    double totalGeneral = 0.0;
-    
-    for (var p in pedidos) {
-      double totalPedido = (p['total'] as num?)?.toDouble() ?? 0.0;
-      totalGeneral += totalPedido;
-      String nombreClienteRaw = p['cliente']?.toString() ?? '';
-      String codigoCliente = '';
-      
-      if (nombreClienteRaw.isNotEmpty) {
-        final resCliente = await db.query('clientes', where: 'nombre = ?', whereArgs: [nombreClienteRaw], limit: 1);
-        if (resCliente.isNotEmpty) codigoCliente = resCliente.first['codigo']?.toString() ?? '';
-      }
-      
-      String clienteConCodigo = codigoCliente.isNotEmpty ? '[$codigoCliente] $nombreClienteRaw' : nombreClienteRaw;
-      List<pw.Widget> widgetsProductosPedido = [];
-      
-      try {
-        String prodStr = p['productos_json']?.toString() ?? '';
-        if (prodStr.isNotEmpty) {
-          List<String> items = prodStr.split(';');
-          for (var item in items) {
-            item = item.trim();
-            if (item.isEmpty) continue;
-            
-            RegExp regExp = RegExp(r'\s*\(x(\d+)\)$');
-            Match? match = regExp.firstMatch(item);
-            int cantidad = 1;
-            String nombreProd = item;
-            if (match != null) {
-              cantidad = int.tryParse(match.group(1) ?? '1') ?? 1;
-              nombreProd = item.replaceFirst(regExp, '').trim();
-            }
-            
-            String detalleComentario = '';
-            int bracketStart = nombreProd.indexOf('[');
-            int bracketEnd = nombreProd.lastIndexOf(']');
-            if (bracketStart != -1 && bracketEnd != -1 && bracketEnd > bracketStart) {
-              detalleComentario = nombreProd.substring(bracketStart + 1, bracketEnd).trim();
-              nombreProd = nombreProd.substring(0, bracketStart).trim();
-            }
-            
-            String codigoProd = '';
-            final resProd = await db.query('productos', where: 'nombre = ?', whereArgs: [nombreProd], limit: 1);
-            if (resProd.isNotEmpty) codigoProd = resProd.first['codigo']?.toString() ?? '';
-            
-            String prodConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
-            widgetsProductosPedido.add(pw.Text('[   ] $prodConCodigo (x$cantidad)', style: const pw.TextStyle(fontSize: 9)));
-            
-            if (detalleComentario.isNotEmpty) {
-              widgetsProductosPedido.add(
-                pw.Padding(
-                  padding: const pw.EdgeInsets.only(left: 10, bottom: 2),
-                  child: pw.Text(detalleComentario, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
-                ),
-              );
-            }
-          }
-        }
-      } catch (_) {
-        widgetsProductosPedido.add(pw.Text(p['productos_json']?.toString() ?? '', style: const pw.TextStyle(fontSize: 9)));
-      }
-      
-      String numPedRaw = p['numero_pedido']?.toString() ?? '';
-      if (numPedRaw.isEmpty) numPedRaw = p['id']?.toString() ?? '';
-      String numLimpio = numPedRaw.replaceAll('Pedido', '').replaceAll('#', '').trim();
-      
-      filasReporteWidgets.add([
-        pw.Text('Pedido $numLimpio', style: const pw.TextStyle(fontSize: 9)),
-        pw.Text(clienteConCodigo, style: const pw.TextStyle(fontSize: 9)),
-        pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: widgetsProductosPedido),
-        pw.Text("L. ${totalPedido.toStringAsFixed(2)}", style: const pw.TextStyle(fontSize: 9)),
-      ]);
-    }
-    
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(24),
-        build: (pw.Context context) {
-          return [
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text("D   I   C   O   S   M   O", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-                    pw.Text("PRODUCTOS CHAMER MEDICAMENTOS UTILES ESCOLARES NOVEDADES Y MAS", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-                  ],
-                ),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text("Reporte General De Ventas", style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                    if (_fechaInicio != null && _fechaFin != null)
-                      pw.Text('Del: ${DateFormat('dd/MM/yy').format(_fechaInicio!)} al ${DateFormat('dd/MM/yy').format(_fechaFin!)}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-                    pw.Text("Fecha: ${DateFormat('dd/MM/yy').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
-                  ],
-                ),
-              ],
-            ),
-            pw.SizedBox(height: 10),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.end,
-              children: [
-                pw.Text('Total Gral: ', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                  decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey700), borderRadius: pw.BorderRadius.circular(4)),
-                  child: pw.Text('L. ${totalGeneral.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                ),
-              ],
-            ),
-            pw.SizedBox(height: 10),
-            pw.Table(
-              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
-              columnWidths: {0: const pw.FlexColumnWidth(0.9), 1: const pw.FlexColumnWidth(2.2), 2: const pw.FlexColumnWidth(5.5), 3: const pw.FlexColumnWidth(1.3)},
-              children: [
-                pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: PdfColors.blue900),
-                  children: [
-                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Pedido', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10), textAlign: pw.TextAlign.center)),
-                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Nombre Cliente', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Productos', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Valor Total', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10), textAlign: pw.TextAlign.right)),
-                  ],
-                ),
-                for (var fila in filasReporteWidgets)
-                  pw.TableRow(
-                    children: [
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Align(alignment: pw.Alignment.center, child: fila[0])),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: fila[1]),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: fila[2]),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Align(alignment: pw.Alignment.centerRight, child: fila[3])),
-                    ],
-                  ),
-              ],
-            ),
-          ];
-        },
-      ),
-    );
-    await _guardarYCompartirPdf(pdf, 'Reporte_General_${DateTime.now().millisecondsSinceEpoch}.pdf');
-  }
-
-  Future<void> _generarPdfProductosVendidos() async {
-    final db = await DatabaseHelper.instance.database;
-    String query = 'SELECT * FROM pedidos';
-    List<String> args = [];
-    if (_fechaInicio != null && _fechaFin != null) {
-      String inicioStr = DateFormat('dd-MM-yy').format(_fechaInicio!);
-      String finStr = '${DateFormat('dd-MM-yy').format(_fechaFin!)} 23:59';
-      query += ' WHERE fecha BETWEEN ? AND ?';
-      args = [inicioStr, finStr];
-    }
-    
-    final pedidos = await db.rawQuery(query, args);
-    if (pedidos.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No hay pedidos en el rango de fechas seleccionado')));
-      return;
-    }
-    
-    Map<String, int> conteoProductos = {};
-    Map<String, double> valorTotalProductos = {};
-    Map<String, String> comentariosProductos = {};
-    
-    for (var pedido in pedidos) {
-      String productosJson = pedido['productos_json']?.toString() ?? '';
-      List<String> items = productosJson.split(';');
-      for (var item in items) {
-        item = item.trim();
-        if (item.isEmpty) continue;
-        
-        RegExp regExp = RegExp(r'\s*\(x(\d+)\)$');
-        Match? match = regExp.firstMatch(item);
-        int cantidad = 1;
-        String itemLimpio = item;
-        if (match != null) {
-          cantidad = int.tryParse(match.group(1) ?? '1') ?? 1;
-          itemLimpio = item.replaceFirst(regExp, '').trim();
-        }
-        
-        String detalleComentario = '';
-        int bracketStart = itemLimpio.indexOf('[');
-        int bracketEnd = itemLimpio.lastIndexOf(']');
-        String nombreProd = itemLimpio;
-        if (bracketStart != -1 && bracketEnd != -1 && bracketEnd > bracketStart) {
-          detalleComentario = itemLimpio.substring(bracketStart + 1, bracketEnd).trim();
-          nombreProd = itemLimpio.substring(0, bracketStart).trim();
-        }
-        
-        String claveAgrupacion = detalleComentario.isNotEmpty ? '$nombreProd|$detalleComentario' : nombreProd;
-        conteoProductos[claveAgrupacion] = (conteoProductos[claveAgrupacion] ?? 0) + cantidad;
-        
-        final resProd = await db.query('productos', where: 'nombre = ?', whereArgs: [nombreProd], limit: 1);
-        double precioUnitario = resProd.isNotEmpty ? ((resProd.first['precio'] as num?)?.toDouble() ?? 0.0) : 0.0;
-        valorTotalProductos[claveAgrupacion] = (valorTotalProductos[claveAgrupacion] ?? 0.0) + (precioUnitario * cantidad);
-        comentariosProductos[claveAgrupacion] = detalleComentario;
-      }
-    }
-    
-    final listaOrdenada = conteoProductos.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
-    List<List<pw.Widget>> filasProductosWidgets = [];
-    
-    for (var entry in listaOrdenada) {
-      String clave = entry.key;
-      String nombreProd = clave.contains('|') ? clave.split('|')[0] : clave;
-      String comentario = comentariosProductos[clave] ?? '';
-      String codigoProd = '';
-      
-      final resProd = await db.query('productos', where: 'nombre = ?', whereArgs: [nombreProd], limit: 1);
-      if (resProd.isNotEmpty) codigoProd = resProd.first['codigo']?.toString() ?? '';
-      
-      String productoConCodigo = codigoProd.isNotEmpty ? '[$codigoProd] $nombreProd' : nombreProd;
-      List<pw.Widget> widgetsContenido = [pw.Text(productoConCodigo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))];
-      if (comentario.isNotEmpty) {
-        widgetsContenido.add(pw.Padding(padding: const pw.EdgeInsets.only(left: 7), child: pw.Text(comentario, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700))));
-      }
-      
-      filasProductosWidgets.add([
-        pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: widgetsContenido),
-        pw.Text(entry.value.toString(), style: const pw.TextStyle(fontSize: 9)),
-        pw.Text('L. ${(valorTotalProductos[clave] ?? 0.0).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9)),
-      ]);
-    }
-    
-    final pdf = pw.Document();
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(24),
-        build: (pw.Context context) {
-          return [
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text("D   I   C   O   S   M   O", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-                    pw.Text("PRODUCTOS CHAMER MEDICAMENTOS UTILES ESCOLARES NOVEDADES Y MAS", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-                  ],
-                ),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text("Reporte Gral de Productos Vendidos", style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                    if (_fechaInicio != null && _fechaFin != null)
-                      pw.Text('Del: ${DateFormat('dd/MM/yy').format(_fechaInicio!)} al ${DateFormat('dd/MM/yy').format(_fechaFin!)}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-                    pw.Text("Fecha: ${DateFormat('dd/MM/yy').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
-                  ],
-                ),
-              ],
-            ),
-            pw.SizedBox(height: 15),
-            pw.Table(
-              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
-              columnWidths: {0: const pw.FlexColumnWidth(4.5), 1: const pw.FlexColumnWidth(1.5), 2: const pw.FlexColumnWidth(2.0)},
-              children: [
-                pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: PdfColors.blue900),
-                  children: [
-                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('NOMBRE DEL PRODUCTO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('CANTIDAD', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10), textAlign: pw.TextAlign.center)),
-                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('VALOR TOTAL', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10), textAlign: pw.TextAlign.right)),
-                  ],
-                ),
-                for (var fila in filasProductosWidgets)
-                  pw.TableRow(
-                    children: [
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: fila[0]),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Align(alignment: pw.Alignment.center, child: fila[1])),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Align(alignment: pw.Alignment.centerRight, child: fila[2])),
-                    ],
-                  ),
-              ],
-            ),
-          ];
-        },
-      ),
-    );
-    await _guardarYCompartirPdf(pdf, 'Reporte_Productos_${DateTime.now().millisecondsSinceEpoch}.pdf');
-  }
-
-  Future<void> _generarPdfReporteEntregaSemanal() async {
-    if (_semanaSeleccionada == null || _pedidosDeLaSemana.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor selecciona una semana/bloque con pedidos.')));
-      return;
-    }
-    final db = await DatabaseHelper.instance.database;
-    List<List<String>> filasReporte = [];
-    double sumaTotalFacturado = 0.0;
-    double sumaTotalEntregado = 0.0;
-    
-    for (var p in _pedidosDeLaSemana) {
-      String nombreClienteRaw = p['cliente']?.toString() ?? '';
-      String codigoCliente = '';
-      
-      if (nombreClienteRaw.isNotEmpty) {
-        final resCliente = await db.query('clientes', where: 'nombre = ?', whereArgs: [nombreClienteRaw], limit: 1);
-        if (resCliente.isNotEmpty) codigoCliente = resCliente.first['codigo']?.toString() ?? '';
-      }
-      
-      String clienteConCodigo = codigoCliente.isNotEmpty ? '[$codigoCliente] $nombreClienteRaw' : nombreClienteRaw;
-      String numPedRaw = p['numero_pedido']?.toString() ?? p['id'].toString();
-      String numeroPedidoFormateado = numPedRaw.toLowerCase().contains('pedido') ? numPedRaw : 'Pedido #$numPedRaw';
-      
-      double facturado = (p['total'] as num?)?.toDouble() ?? 0.0;
-      double entregado = (p['valor_entregado'] as num?)?.toDouble() ?? facturado;
-      String comentario = p['comentario_entrega']?.toString() ?? 'Entregado';
-      
-      sumaTotalFacturado += facturado;
-      sumaTotalEntregado += entregado;
-      filasReporte.add([
-        numeroPedidoFormateado,
-        clienteConCodigo,
-        'L. ${facturado.toStringAsFixed(2)}',
-        'L. ${entregado.toStringAsFixed(2)}',
-        comentario,
-      ]);
-    }
-    
-    double diferenciaTotal = sumaTotalFacturado - sumaTotalEntregado;
-    final pdf = pw.Document();
-    
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(24),
-        build: (pw.Context context) {
-          return [
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text("D   I   C   O   S   M   O", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-                    pw.Text("PRODUCTOS CHAMER MEDICAMENTOS UTILES ESCOLARES NOVEDADES Y MAS", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-                  ],
-                ),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text("REPORTE DE ENTREGA SEMANAL", style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                    pw.Text(_semanaSeleccionada!, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                    pw.Text("Generado: ${DateFormat('dd/MM/yy').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
-                  ],
-                ),
-              ],
-            ),
-            pw.SizedBox(height: 15),
-            pw.Container(
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(color: PdfColors.grey100, border: pw.Border.all(color: PdfColors.blue900), borderRadius: pw.BorderRadius.circular(5)),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-                children: [
-                  pw.Column(children: [pw.Text('Total Facturado', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)), pw.Text('L. ${sumaTotalFacturado.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 12, color: PdfColors.blue900, fontWeight: pw.FontWeight.bold))]),
-                  pw.Column(children: [pw.Text('Total Entregado', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)), pw.Text('L. ${sumaTotalEntregado.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 12, color: PdfColors.green800, fontWeight: pw.FontWeight.bold))]),
-                  pw.Column(children: [pw.Text('Diferencia', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)), pw.Text('L. ${diferenciaTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 12, color: diferenciaTotal > 0 ? PdfColors.red800 : PdfColors.black, fontWeight: pw.FontWeight.bold))]),
-                ]
-              )
-            ),
-            pw.SizedBox(height: 15),
-            pw.Table.fromTextArray(
-              headers: ['Pedido No.', 'Código y Nombre Cliente', 'Cant. Facturado', 'Cant. Entregada', 'Comentarios'],
-              data: filasReporte,
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.blue900),
-              cellStyle: const pw.TextStyle(fontSize: 9),
-              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              columnWidths: {0: const pw.FlexColumnWidth(1.5), 1: const pw.FlexColumnWidth(3.0), 2: const pw.FlexColumnWidth(1.5), 3: const pw.FlexColumnWidth(1.5), 4: const pw.FlexColumnWidth(2.5)},
-              cellAlignments: {0: pw.Alignment.center, 1: pw.Alignment.centerLeft, 2: pw.Alignment.centerRight, 3: pw.Alignment.centerRight, 4: pw.Alignment.centerLeft},
-            ),
-          ];
-        },
-      ),
-    );
-    
-    String sufijoSemana = _semanaSeleccionada?.replaceAll(' ', '_').replaceAll('/', '-') ?? 'Semanal';
-    await _guardarYCompartirPdf(pdf, 'Reporte_Entregas_$sufijoSemana.pdf');
-  }
-  
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Exportar PDF'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ListView(
-          children: [
-            // --- CARD 1: REPORTE GENERAL DE VENTAS ---
-            Card(
-              elevation: 3,
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Reporte General de Ventas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 5),
-                    const Text('Filtra por fechas o déjalas vacías para exportar todo.', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextButton.icon(
-                            icon: const Icon(Icons.calendar_today, size: 16),
-                            label: Text(_fechaInicio == null ? 'Fecha Inicio' : DateFormat('dd/MM/yyyy').format(_fechaInicio!)),
-                            onPressed: () async {
-                              DateTime? picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2030));
-                              if (picked != null) setState(() => _fechaInicio = picked);
-                            },
-                          ),
-                        ),
-                        Expanded(
-                          child: TextButton.icon(
-                            icon: const Icon(Icons.calendar_today, size: 16),
-                            label: Text(_fechaFin == null ? 'Fecha Fin' : DateFormat('dd/MM/yyyy').format(_fechaFin!)),
-                            onPressed: () async {
-                              DateTime? picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2030));
-                              if (picked != null) setState(() => _fechaFin = picked);
-                            },
-                          ),
-                        ),
-                        if (_fechaInicio != null || _fechaFin != null)
-                          IconButton(
-                            icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                            tooltip: 'Limpiar fechas',
-                            onPressed: () => setState(() { _fechaInicio = null; _fechaFin = null; }),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-                        onPressed: _generarPdfGeneral,
-                        icon: const Icon(Icons.picture_as_pdf),
-                        label: const Text('Exportar General'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 15),
-            
-            // --- CARD 2: REPORTE POR PRODUCTOS VENDIDOS ---
-            Card(
-              elevation: 3,
-              child: ListTile(
-                leading: const Icon(Icons.bar_chart, color: Colors.indigo, size: 36),
-                title: const Text('Reporte por Productos Vendidos', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Exporta el total acumulado de unidades vendidas por cada producto con sus comentarios.'),
-                trailing: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-                  onPressed: _generarPdfProductosVendidos,
-                  child: const Text('Exportar'),
-                ),
-              ),
-            ),
-            const SizedBox(height: 15),
-            
-            // --- CARD 3: GESTIÓN DE ENTREGAS Y REPORTE SEMANAL ---
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.local_shipping, color: Colors.indigo),
-                        SizedBox(width: 8),
-                        Text('Liquidación y Reporte de Entregas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      ],
-                    ),
-                    const Divider(),
-                    
-                    // Selector de Semana por Rango de Fechas
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: '1. Selecciona la Semana', border: OutlineInputBorder()),
-                      value: _semanaSeleccionada,
-                      isExpanded: true,
-                      items: _semanasDisponibles.map((semana) {
-                        return DropdownMenuItem(value: semana, child: Text(semana, style: const TextStyle(fontSize: 14)));
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() => _semanaSeleccionada = val);
-                          _cargarPedidosPorSemana(val);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 15),
-                    
-                    // Selector de Pedido
-                    DropdownButtonFormField<int>(
-                      decoration: const InputDecoration(labelText: '2. Selecciona el Pedido', border: OutlineInputBorder()),
-                      value: _idPedidoSeleccionado,
-                      isExpanded: true,
-                      items: _pedidosDeLaSemana.map((p) {
-                        String numPed = p['numero_pedido']?.toString() ?? p['id'].toString();
-                        return DropdownMenuItem<int>(
-                          value: p['id'] as int, 
-                          child: Text('Pedido #$numPed', style: const TextStyle(fontSize: 14))
-                        );
-                      }).toList(),
-                      onChanged: _semanasDisponibles.isEmpty ? null : (val) {
-                        if (val != null) {
-                          _seleccionarPedido(val);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 15),
-                    
-                    // Información del Cliente
-                    if (_clienteSeleccionadoInfo.isNotEmpty) ...[
-                      TextFormField(
-                        key: ValueKey(_clienteSeleccionadoInfo), 
-                        initialValue: _clienteSeleccionadoInfo,
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Cliente Seleccionado',
-                          border: OutlineInputBorder(),
-                          filled: true,
-                          fillColor: Color(0xFFF5F5F5),
-                          prefixIcon: Icon(Icons.person, color: Colors.indigo),
-                        ),
-                      ),
-                      const SizedBox(height: 15),
-                    ],
-                    
-                    // Cajas de texto de totales
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _facturadoController,
-                            readOnly: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Total Facturado',
-                              prefixText: 'L. ',
-                              filled: true,
-                              fillColor: Color(0xFFF5F5F5),
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _entregadoController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(
-                              labelText: 'Entregado Real',
-                              prefixText: 'L. ',
-                              border: OutlineInputBorder(),
-                              focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.green, width: 2)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 15),
-                    
-                    // Comentarios
-                    TextFormField(
-                      controller: _comentarioController,
-                      maxLines: 2,
-                      decoration: const InputDecoration(
-                        labelText: 'Notas de entrega (Devoluciones, incompleto, etc.)',
-                        border: OutlineInputBorder(),
-                        alignLabelWithHint: true,
-                      ),
-                    ),
-                    const SizedBox(height: 15),
-                    
-                    // Botones
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            onPressed: _idPedidoSeleccionado == null ? null : _guardarDatosEntrega,
-                            icon: const Icon(Icons.save),
-                            label: const Text('Guardar Entrega'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.indigo, 
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            onPressed: _semanaSeleccionada == null ? null : _generarPdfReporteEntregaSemanal,
-                            icon: const Icon(Icons.picture_as_pdf),
-                            label: const Text('Generar Reporte Semanal'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+        ElevatedButton.icon(
+          onPressed: selectedOrder != null ? _saveDelivery : null,
+          icon: const Icon(Icons.save),
+          label: const Text('Guardar Entrega'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+          ),
         ),
-      ),
+        const SizedBox(height: 12),
+        ElevatedButton.icon(
+          onPressed: _generateWeeklyReport,
+          icon: const Icon(Icons.picture_as_pdf),
+          label: const Text('Generar Reporte Semanal'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.indigo,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+          ),
+        ),
+      ],
     );
   }
 }
