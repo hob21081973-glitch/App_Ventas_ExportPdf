@@ -264,7 +264,7 @@ class MenuPrincipalState extends State<MenuPrincipal> {
       const VistaGestionProductos(),
       const VistaResumenGeneral(),
       const VistaResumenProductos(),
-      const VistaExportarPdf(),
+      VistaExportarPdf(),
     ];
 
     return Scaffold(
