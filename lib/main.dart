@@ -2153,7 +2153,6 @@ class _ExportPdfTabState extends State<ExportPdfTab> {
 }
 
 // Asegúrate de ajustar esta importación según la ubicación de tu DatabaseHelper
-import 'database_helper.dart'; 
 
 class VistaExportarPdf extends StatefulWidget {
   const VistaExportarPdf({Key? key}) : super(key: key);
