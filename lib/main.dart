@@ -1940,22 +1940,12 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
 
   // --- LÓGICA DE AGRUPACIÓN POR SEMANAS GUARDADAS ---
   
-Future<void> _cargarSemanas() async {
+  Future<void> _cargarSemanas() async {
     try {
       final db = await DatabaseHelper.instance.database;
+      final result = await db.rawQuery('SELECT DISTINCT semana FROM pedidos WHERE semana IS NOT NULL AND semana != ""');
       
-      // Hacemos una consulta general para ver qué campos o registros existen
-      final result = await db.rawQuery('SELECT DISTINCT semana FROM pedidos');
-      print('DEBUG - Semanas encontradas en BD: $result'); // Revisa tu consola de depuración (Run/Debug console)
-      
-      List<String> semanas = [];
-      for (var e in result) {
-        String? sem = e['semana']?.toString();
-        if (sem != null && sem.trim().isNotEmpty && sem != 'null') {
-          semanas.add(sem);
-        }
-      }
-      
+      List<String> semanas = result.map((e) => e['semana'].toString()).toList();
       semanas.sort((a, b) => b.compareTo(a)); 
       
       setState(() {
@@ -1964,17 +1954,7 @@ Future<void> _cargarSemanas() async {
           _semanaSeleccionada = null;
         }
       });
-    } 
-    catch (e) {
-      print('DEBUG - Error cargando semanas: $e');
-      setState(() {
-        _semanasDisponibles = [];
-        _semanaSeleccionada = null;
-      });
-    }
-  }
-  catch (e) {
-      // Por si la columna aún no existe o hay error en la base de datos
+    } catch (e) {
       setState(() {
         _semanasDisponibles = [];
         _semanaSeleccionada = null;
@@ -2053,11 +2033,11 @@ Future<void> _cargarSemanas() async {
       whereArgs: [_idPedidoSeleccionado],
     );
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('¡Datos de entrega guardados exitosamente!'), backgroundColor: Colors.green),
     );
     
-    // Recargar los pedidos de la semana para ocultar el procesado y limpiar pantalla
     if (_semanaSeleccionada != null) {
       await _cargarPedidosPorSemana(_semanaSeleccionada!);
     }
@@ -2069,7 +2049,6 @@ Future<void> _cargarSemanas() async {
     try {
       Directory? directorio;
       if (Platform.isAndroid) {
-        // Ruta exacta solicitada para todos los PDFs
         directorio = Directory('/storage/emulated/0/download');
         if (!await directorio.exists()) {
           await directorio.create(recursive: true);
@@ -2421,6 +2400,7 @@ Future<void> _cargarSemanas() async {
 
   Future<void> _generarPdfReporteEntregaSemanal() async {
     if (_semanaSeleccionada == null || _pedidosDeLaSemana.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor selecciona una semana con pedidos.')));
       return;
     }
@@ -2625,7 +2605,7 @@ Future<void> _cargarSemanas() async {
                     ),
                     const Divider(),
                     
-                    // Selector de Semana (Con validación de vacíos)
+                    // Selector de Semana
                     DropdownButtonFormField<String>(
                       decoration: const InputDecoration(labelText: '1. Selecciona la Semana', border: OutlineInputBorder()),
                       value: _semanasDisponibles.contains(_semanaSeleccionada) ? _semanaSeleccionada : null,
@@ -2643,7 +2623,7 @@ Future<void> _cargarSemanas() async {
                     ),
                     const SizedBox(height: 15),
                     
-                    // Selector de Pedido (Con validación de vacíos)
+                    // Selector de Pedido
                     DropdownButtonFormField<int>(
                       decoration: const InputDecoration(labelText: '2. Selecciona el Pedido', border: OutlineInputBorder()),
                       value: _idPedidoSeleccionado != null && _pedidosDeLaSemana.any((p) => p['id'] == _idPedidoSeleccionado) 
