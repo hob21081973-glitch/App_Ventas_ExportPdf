@@ -2069,52 +2069,75 @@ class _VistaExportarPdfState extends State<VistaExportarPdf> {
   }
 
   void _limpiarCamposEntrega() {
-  _idPedidoSeleccionado = null;
-  _clienteSeleccionadoInfo = '';
-  _facturadoController.clear();
-  _entregadoController.clear();
-  _comentarioController.clear();
-}
-
-Future<void> _guardarDatosEntrega() async {
-  if (_idPedidoSeleccionado == null) return;
-  
-  final db = await DatabaseHelper.instance.database;
-  double entregado = double.tryParse(_entregadoController.text) ?? 0.0;
-  
-  await db.update(
-    'pedidos',
-    {
-      'valor_entregado': entregado,
-      'comentario_entrega': _comentarioController.text,
-    },
-    where: 'id = ?',
-    whereArgs: [_idPedidoSeleccionado],
-  );
-  
-  if (!mounted) return;
-
-  // 1. Primero actualizamos la lista de la semana
-  if (_semanaSeleccionada != null) {
-    await _recargarListaSinSeleccion(_semanaSeleccionada!);
+    _idPedidoSeleccionado = null;
+    _clienteSeleccionadoInfo = '';
+    _facturadoController.clear();
+    _entregadoController.clear();
+    _comentarioController.clear();
   }
 
-  // 2. Forzamos la limpieza total de la UI en un único setState
-  setState(() {
-    _limpiarCamposEntrega();
-  });
-  
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text('¡Datos de entrega guardados exitosamente!'), 
-      backgroundColor: Colors.green,
-    ),
-  );
-}
+  Future<void> _seleccionarPedido(int idPedido) async {
+    final pedido = _pedidosDeLaSemana.firstWhere((p) => p['id'] == idPedido, orElse: () => _pedidosDeLaSemana.first);
+    double totalFacturado = (pedido['total'] as num?)?.toDouble() ?? 0.0;
+    double valorEntregado = (pedido['valor_entregado'] as num?)?.toDouble() ?? totalFacturado;
+    String comentario = pedido['comentario_entrega']?.toString() ?? '';
+    String nombreClienteRaw = pedido['cliente']?.toString() ?? '';
+    String codigoCliente = '';
     
+    if (nombreClienteRaw.isNotEmpty) {
+      final db = await DatabaseHelper.instance.database;
+      final resCliente = await db.query(
+        'clientes',
+        where: 'nombre = ?',
+        whereArgs: [nombreClienteRaw],
+        limit: 1,
+      );
+      if (resCliente.isNotEmpty) {
+        codigoCliente = resCliente.first['codigo']?.toString() ?? '';
+      }
+    }
+    
+    setState(() {
+      _idPedidoSeleccionado = idPedido;
+      _clienteSeleccionadoInfo = codigoCliente.isNotEmpty ? '[$codigoCliente] $nombreClienteRaw' : nombreClienteRaw;
+      _facturadoController.text = totalFacturado.toStringAsFixed(2);
+      _entregadoController.text = valorEntregado.toStringAsFixed(2);
+      _comentarioController.text = comentario;
+    });
+  }
+
+  Future<void> _guardarDatosEntrega() async {
+    if (_idPedidoSeleccionado == null) return;
+    
+    final db = await DatabaseHelper.instance.database;
+    double entregado = double.tryParse(_entregadoController.text) ?? 0.0;
+    
+    await db.update(
+      'pedidos',
+      {
+        'valor_entregado': entregado,
+        'comentario_entrega': _comentarioController.text,
+      },
+      where: 'id = ?',
+      whereArgs: [_idPedidoSeleccionado],
+    );
+    
+    if (!mounted) return;
+
     if (_semanaSeleccionada != null) {
       await _recargarListaSinSeleccion(_semanaSeleccionada!);
     }
+
+    setState(() {
+      _limpiarCamposEntrega();
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('¡Datos de entrega guardados exitosamente!'), 
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
   // --- MÉTODOS DE PDF ---
@@ -2763,10 +2786,10 @@ Future<void> _guardarDatosEntrega() async {
                         Expanded(
                           child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
                             onPressed: _idPedidoSeleccionado == null ? null : _guardarDatosEntrega,
                             icon: const Icon(Icons.save),
                             label: const Text('Guardar Entrega'),
@@ -2782,7 +2805,7 @@ Future<void> _guardarDatosEntrega() async {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.indigo, 
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12)
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                             onPressed: _semanaSeleccionada == null ? null : _generarPdfReporteEntregaSemanal,
                             icon: const Icon(Icons.picture_as_pdf),
