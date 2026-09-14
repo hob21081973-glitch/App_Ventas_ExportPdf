@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'vista_resumen_por_producto.dart';
 
 // Notificador global para actualizar datos en tiempo real entre pestañas
 final ValueNotifier<int> changeNotifierPedidos = ValueNotifier<int>(0); 
@@ -265,8 +266,8 @@ class MenuPrincipalState extends State<MenuPrincipal> {
       const VistaGestionClientes(),
       const VistaGestionProductos(),
       const VistaResumenGeneral(),
-      VistaResumenProductos(),
-      VistaExportarPdf(),
+            VistaResumenPorProducto(),
+            VistaExportarPdf(),
     ];
 
     return Scaffold(
