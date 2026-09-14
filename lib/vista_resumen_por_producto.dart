@@ -1,10 +1,10 @@
-import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:intl/intl.dart';
+//import 'dart:convert';
+//import 'package:flutter/material.dart';
+//import 'package:pdf/pdf.dart';
+//import 'package:pdf/widgets.dart' as pw;
+//import 'package:printing/printing.dart';
+//import 'package:sqflite/sqflite.dart';
+//import 'package:intl/intl.dart';
 
 class VistaResumenPorProducto extends StatefulWidget {
   const VistaResumenPorProducto({Key? key}) : super(key: key);
