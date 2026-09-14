@@ -265,7 +265,7 @@ class MenuPrincipalState extends State<MenuPrincipal> {
       const VistaGestionClientes(),
       const VistaGestionProductos(),
       const VistaResumenGeneral(),
-      const VistaResumenProductos(),
+      VistaResumenProductos(),
       VistaExportarPdf(),
     ];
 
