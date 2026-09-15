@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Java JDK 17
+      - name: Set up Java JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -22,7 +22,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.3'
+          flutter-version: '3.24.5'
           channel: 'stable'
 
       - name: Install dependencies
@@ -30,5 +30,3 @@ jobs:
 
       - name: Build APK
         run: flutter build apk --release
-        env:
-          JAVA_HOME: ${{ env.JAVA_HOME_17_X64 }}
