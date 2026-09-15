@@ -18,121 +18,90 @@ class _VistaResumenPorProductoState extends State<VistaResumenPorProducto> {
   bool _cargando = true;
   double _totalGeneral = 0.0;
   int _totalUnidades = 0;
-  String _mensajeDiagnostico = "";
 
-  DateTime? _fechaInicio;
-  DateTime? _fechaFin;
+  // Lista de semanas detectadas en el historial
+  List<String> _semanasDisponibles = ['Todas las semanas'];
+  String _semanaSeleccionada = 'Todas las semanas';
 
   @override
   void initState() {
     super.initState();
-    // Inicia por defecto cubriendo los últimos 30 días
-    final ahora = DateTime.now();
-    _fechaInicio = ahora.subtract(const Duration(days: 30));
-    _fechaFin = ahora;
-    _cargarResumenProductos();
+    _cargarResumenYSemanas();
   }
 
-  Future<void> _cargarResumenProductos() async {
-    setState(() {
-      _cargando = true;
-      _mensajeDiagnostico = "";
-    });
+  Future<Database> _obtenerBaseDatos() async {
+    final path = await getDatabasesPath();
+    final dbPath = '$path/app_ventas.db';
+    return openDatabase(dbPath);
+  }
+
+  Future<void> _cargarResumenYSemanas() async {
+    setState(() => _cargando = true);
 
     try {
-      final path = await getDatabasesPath();
-      final dbPath = '$path/app_ventas.db';
-      final db = await openDatabase(dbPath);
+      final db = await _obtenerBaseDatos();
 
-      // Obtener todas las tablas en la base de datos SQLite
+      // 1. Obtener lista de tablas
       final tablesResult = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'android_%'"
       );
       List<String> tablas = tablesResult.map((t) => t['name'].toString()).toList();
 
+      Set<String> semanasDetectadas = {};
       Map<String, Map<String, dynamic>> resumenMap = {};
-      List<String> infoEstrucutra = [];
 
       for (String tabla in tablas) {
         final pragma = await db.rawQuery("PRAGMA table_info($tabla)");
         List<String> columnas = pragma.map((c) => c['name'].toString()).toList();
-        infoEstrucutra.add("Tabla: '$tabla' -> [${columnas.join(', ')}]");
 
         final List<Map<String, dynamic>> filas = await db.query(tabla);
 
         for (var fila in filas) {
-          // Evaluar filtro de fecha si la tabla tiene columna de fecha
-          String? colFecha = columnas.firstWhere(
-            (c) => c.toLowerCase().contains('fecha') || c.toLowerCase().contains('date'),
-            orElse: () => '',
-          );
+          // Detectar la semana guardada en el pedido
+          String semanaFila = '';
 
-          if (colFecha.isNotEmpty && fila[colFecha] != null) {
-            try {
-              DateTime? fechaFila;
-              String valStr = fila[colFecha].toString();
-              if (valStr.contains('T')) {
-                fechaFila = DateTime.parse(valStr);
-              } else if (valStr.contains('-')) {
-                fechaFila = DateFormat('yyyy-MM-dd').parse(valStr.split(' ')[0]);
+          // Buscar columna que contenga el nombre de la semana
+          for (String col in columnas) {
+            String colLower = col.toLowerCase();
+            if (colLower.contains('semana') || colLower.contains('grupo')) {
+              if (fila[col] != null && fila[col].toString().trim().isNotEmpty) {
+                semanaFila = fila[col].toString().trim();
+                semanasDetectadas.add(semanaFila);
+                break;
               }
-
-              if (fechaFila != null) {
-                if (_fechaInicio != null && fechaFila.isBefore(DateTime(_fechaInicio!.year, _fechaInicio!.month, _fechaInicio!.day))) {
-                  continue;
-                }
-                if (_fechaFin != null && fechaFila.isAfter(DateTime(_fechaFin!.year, _fechaFin!.month, _fechaFin!.day, 23, 59, 59))) {
-                  continue;
-                }
-              }
-            } catch (_) {}
+            }
           }
 
-          // Extraer productos si es una tabla relacional directa
-          String? colNombre = columnas.firstWhere(
-            (c) => ['nombre_producto', 'producto', 'nombre', 'descripcion', 'item'].contains(c.toLowerCase()),
-            orElse: () => '',
-          );
-          String? colCant = columnas.firstWhere(
-            (c) => ['cantidad', 'cant', 'qty', 'unidades'].contains(c.toLowerCase()),
-            orElse: () => '',
-          );
-          String? colMonto = columnas.firstWhere(
-            (c) => ['subtotal', 'total', 'monto', 'precio', 'precio_total'].contains(c.toLowerCase()),
-            orElse: () => '',
-          );
-
-          if (tabla != 'pedidos' && colNombre.isNotEmpty && colCant.isNotEmpty) {
-            String nombre = fila[colNombre]?.toString() ?? 'Producto';
-            int cant = int.tryParse(fila[colCant]?.toString() ?? '0') ?? 0;
-            double monto = double.tryParse(fila[colMonto]?.toString() ?? '0') ?? 0.0;
-            if (cant > 0) {
-              _agregarAlResumen(resumenMap, nombre, cant, monto);
-            }
-          } else {
-            // Extraer productos si están guardados como JSON dentro de la tabla pedidos
+          // Si no está en columnas directas, buscar dentro de datos estructurados/JSON
+          if (semanaFila.isEmpty) {
             for (String col in columnas) {
               dynamic val = fila[col];
-              if (val is String && (val.trim().startsWith('[') || val.trim().startsWith('{'))) {
+              if (val is String && val.contains('semana')) {
                 try {
                   var jsonVal = jsonDecode(val);
-                  List<dynamic> items = jsonVal is List ? jsonVal : [jsonVal];
-                  for (var item in items) {
-                    if (item is Map) {
-                      String pNombre = (item['nombre_producto'] ?? item['nombre'] ?? item['producto'] ?? item['descripcion'] ?? 'Producto').toString();
-                      int pCant = int.tryParse(item['cantidad']?.toString() ?? item['cant']?.toString() ?? '1') ?? 1;
-                      double pPrecio = double.tryParse(item['precio']?.toString() ?? item['precio_unitario']?.toString() ?? '0') ?? 0.0;
-                      double pMonto = double.tryParse(item['subtotal']?.toString() ?? item['monto']?.toString() ?? '0') ?? (pCant * pPrecio);
-
-                      _agregarAlResumen(resumenMap, pNombre, pCant, pMonto);
-                    }
+                  if (jsonVal is Map && jsonVal.containsKey('semana')) {
+                    semanaFila = jsonVal['semana'].toString().trim();
+                    if (semanaFila.isNotEmpty) semanasDetectadas.add(semanaFila);
                   }
                 } catch (_) {}
               }
             }
           }
+
+          // Aplicar filtro de la semana seleccionada
+          if (_semanaSeleccionada != 'Todas las semanas' && semanaFila.isNotEmpty) {
+            if (semanaFila.toLowerCase() != _semanaSeleccionada.toLowerCase()) {
+              continue; // Salta los pedidos que no pertenezcan a la semana seleccionada
+            }
+          }
+
+          // Extraer productos del pedido
+          _procesarProductosDeFila(fila, columnas, resumenMap, tabla);
         }
       }
+
+      // Actualizar la lista desplegable de semanas
+      List<String> listaSemanas = ['Todas las semanas', ...semanasDetectadas.toList()..sort()];
 
       List<Map<String, dynamic>> resultado = resumenMap.values.toList();
       resultado.sort((a, b) => (b['total_cantidad'] as int).compareTo(a['total_cantidad'] as int));
@@ -145,19 +114,69 @@ class _VistaResumenPorProductoState extends State<VistaResumenPorProducto> {
       }
 
       setState(() {
+        _semanasDisponibles = listaSemanas;
+        if (!_semanasDisponibles.contains(_semanaSeleccionada)) {
+          _semanaSeleccionada = 'Todas las semanas';
+        }
         _productosConsolidados = resultado;
         _totalUnidades = sumaCantidad;
         _totalGeneral = sumaMonto;
         _cargando = false;
-        if (resultado.isEmpty) {
-          _mensajeDiagnostico = "No se encontraron productos acumulados.\n\nEstructura de BD detectada:\n" + infoEstrucutra.join("\n");
-        }
       });
     } catch (e) {
-      setState(() {
-        _cargando = false;
-        _mensajeDiagnostico = "Error al leer base de datos:\n$e";
-      });
+      debugPrint("Error al cargar resumen por semana: $e");
+      setState(() => _cargando = false);
+    }
+  }
+
+  void _procesarProductosDeFila(
+    Map<String, dynamic> fila,
+    List<String> columnas,
+    Map<String, Map<String, dynamic>> resumenMap,
+    String tabla,
+  ) {
+    // Caso 1: Tabla relacional directa de detalle de productos
+    String? colNombre = columnas.firstWhere(
+      (c) => ['nombre_producto', 'producto', 'nombre', 'descripcion'].contains(c.toLowerCase()),
+      orElse: () => '',
+    );
+    String? colCant = columnas.firstWhere(
+      (c) => ['cantidad', 'cant', 'qty', 'unidades'].contains(c.toLowerCase()),
+      orElse: () => '',
+    );
+    String? colMonto = columnas.firstWhere(
+      (c) => ['subtotal', 'total', 'monto', 'precio'].contains(c.toLowerCase()),
+      orElse: () => '',
+    );
+
+    if (tabla != 'pedidos' && colNombre.isNotEmpty && colCant.isNotEmpty) {
+      String nombre = fila[colNombre]?.toString() ?? 'Producto';
+      int cant = int.tryParse(fila[colCant]?.toString() ?? '0') ?? 0;
+      double monto = double.tryParse(fila[colMonto]?.toString() ?? '0') ?? 0.0;
+      if (cant > 0) {
+        _agregarAlResumen(resumenMap, nombre, cant, monto);
+      }
+    } else {
+      // Caso 2: Productos guardados como lista/JSON en la tabla de pedidos
+      for (String col in columnas) {
+        dynamic val = fila[col];
+        if (val is String && (val.trim().startsWith('[') || val.trim().startsWith('{'))) {
+          try {
+            var jsonVal = jsonDecode(val);
+            List<dynamic> items = jsonVal is List ? jsonVal : [jsonVal];
+            for (var item in items) {
+              if (item is Map) {
+                String pNombre = (item['nombre_producto'] ?? item['nombre'] ?? item['producto'] ?? item['descripcion'] ?? 'Producto').toString();
+                int pCant = int.tryParse(item['cantidad']?.toString() ?? item['cant']?.toString() ?? '1') ?? 1;
+                double pPrecio = double.tryParse(item['precio']?.toString() ?? item['precio_unitario']?.toString() ?? '0') ?? 0.0;
+                double pMonto = double.tryParse(item['subtotal']?.toString() ?? item['monto']?.toString() ?? '0') ?? (pCant * pPrecio);
+
+                _agregarAlResumen(resumenMap, pNombre, pCant, pMonto);
+              }
+            }
+          } catch (_) {}
+        }
+      }
     }
   }
 
@@ -173,51 +192,10 @@ class _VistaResumenPorProductoState extends State<VistaResumenPorProducto> {
     map[nombre]!['total_monto'] = (map[nombre]!['total_monto'] as double) + monto;
   }
 
-  Future<void> _seleccionarFechaInicio(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _fechaInicio ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
-    );
-    if (picked != null) {
-      setState(() => _fechaInicio = picked);
-      _cargarResumenProductos();
-    }
-  }
-
-  Future<void> _seleccionarFechaFin(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _fechaFin ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
-    );
-    if (picked != null) {
-      setState(() => _fechaFin = picked);
-      _cargarResumenProductos();
-    }
-  }
-
-  void _establecerSemanaActual() {
-    final ahora = DateTime.now();
-    final inicioSemana = ahora.subtract(Duration(days: ahora.weekday - 1));
-    setState(() {
-      _fechaInicio = DateTime(inicioSemana.year, inicioSemana.month, inicioSemana.day);
-      _fechaFin = ahora;
-    });
-    _cargarResumenProductos();
-  }
-
   Future<void> _generarPdfResumen() async {
     final pdf = pw.Document();
     final formatoMoneda = NumberFormat.currency(symbol: 'L ', decimalDigits: 2);
     final fechaHoy = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-
-    String rangoTexto = "Todas las fechas";
-    if (_fechaInicio != null && _fechaFin != null) {
-      rangoTexto = "${DateFormat('dd/MM/yyyy').format(_fechaInicio!)} al ${DateFormat('dd/MM/yyyy').format(_fechaFin!)}";
-    }
 
     pdf.addPage(
       pw.MultiPage(
@@ -237,7 +215,7 @@ class _VistaResumenPorProductoState extends State<VistaResumenPorProducto> {
               ),
             ),
             pw.SizedBox(height: 5),
-            pw.Text('Rango de Fechas: $rangoTexto', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+            pw.Text('Filtro: $_semanaSeleccionada', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 10),
             pw.Text('Total Unidades: $_totalUnidades'),
             pw.Text('Monto Total: ${formatoMoneda.format(_totalGeneral)}'),
@@ -260,14 +238,13 @@ class _VistaResumenPorProductoState extends State<VistaResumenPorProducto> {
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Resumen_Por_Producto.pdf',
+      name: 'Resumen_Productos_${_semanaSeleccionada.replaceAll(' ', '_')}.pdf',
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final formatoMoneda = NumberFormat.currency(symbol: 'L ', decimalDigits: 2);
-    final formatoFecha = DateFormat('dd/MM/yyyy');
 
     return Scaffold(
       appBar: AppBar(
@@ -279,59 +256,55 @@ class _VistaResumenPorProductoState extends State<VistaResumenPorProducto> {
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _cargarResumenProductos,
+            onPressed: _cargarResumenYSemanas,
           ),
         ],
       ),
       body: Column(
         children: [
-          // Filtros de fecha y acceso rápido
+          // Selector desplegable de Semanas
           Card(
-            margin: const EdgeInsets.all(8),
+            margin: const EdgeInsets.all(10),
             elevation: 2,
             child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => _seleccionarFechaInicio(context),
-                          icon: const Icon(Icons.calendar_today, size: 14),
-                          label: Text(
-                            _fechaInicio != null ? 'Desde: ${formatoFecha.format(_fechaInicio!)}' : 'Fecha Inicio',
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                        ),
+                  const Icon(Icons.view_week, color: Colors.blue),
+                  const SizedBox(width: 12),
+                  const Text('Semana:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _semanaSeleccionada,
+                        isExpanded: true,
+                        items: _semanasDisponibles.map((String semana) {
+                          return DropdownMenuItem<String>(
+                            value: semana,
+                            child: Text(
+                              semana,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (nuevoValor) {
+                          if (nuevoValor != null) {
+                            setState(() {
+                              _semanaSeleccionada = nuevoValor;
+                            });
+                            _cargarResumenYSemanas();
+                          }
+                        },
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => _seleccionarFechaFin(context),
-                          icon: const Icon(Icons.calendar_today, size: 14),
-                          label: Text(
-                            _fechaFin != null ? 'Hasta: ${formatoFecha.format(_fechaFin!)}' : 'Fecha Fin',
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: _establecerSemanaActual,
-                      icon: const Icon(Icons.date_range, size: 14),
-                      label: const Text('Esta Semana', style: TextStyle(fontSize: 11)),
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
           ),
 
-          // Tarjeta de Totales
+          // Resumen de Totales
           Container(
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
             color: Theme.of(context).primaryColor.withOpacity(0.1),
@@ -354,12 +327,22 @@ class _VistaResumenPorProductoState extends State<VistaResumenPorProducto> {
             ),
           ),
 
-          // Contenido principal / Lista de productos o diagnósticos
+          // Lista de Productos Consolidados
           Expanded(
             child: _cargando
                 ? const Center(child: CircularProgressIndicator())
-                : _productosConsolidados.isNotEmpty
-                    ? ListView.builder(
+                : _productosConsolidados.isEmpty
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20.0),
+                          child: Text(
+                            'No hay productos registrados en el historial para la semana seleccionada.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey, fontSize: 14),
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
                         itemCount: _productosConsolidados.length,
                         itemBuilder: (context, index) {
                           final item = _productosConsolidados[index];
@@ -368,14 +351,14 @@ class _VistaResumenPorProductoState extends State<VistaResumenPorProducto> {
                           final monto = item['total_monto'] ?? 0.0;
 
                           return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             child: ListTile(
                               leading: CircleAvatar(
                                 backgroundColor: Theme.of(context).primaryColor,
                                 child: Text('$cant', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                               ),
                               title: Text(nombre, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              subtitle: Text('Total unidades vendidas: $cant'),
+                              subtitle: Text('Unidades en $_semanaSeleccionada: $cant'),
                               trailing: Text(
                                 formatoMoneda.format(monto),
                                 style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14),
@@ -383,13 +366,6 @@ class _VistaResumenPorProductoState extends State<VistaResumenPorProducto> {
                             ),
                           );
                         },
-                      )
-                    : SingleChildScrollView(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Text(
-                          _mensajeDiagnostico,
-                          style: const TextStyle(color: Colors.black87, fontSize: 13, fontFamily: 'monospace'),
-                        ),
                       ),
           ),
         ],
