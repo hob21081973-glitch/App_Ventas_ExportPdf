@@ -20,9 +20,14 @@ const String urlClientesCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1v
 const String urlProductosCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmtKhEE5ziDtm_BQdAeOy8c-Z6H6_GbyKcPOvtdjfKtXgxYObBUB-PlK0ldsiwrW78aabDzei-R2Cd/pub?gid=1903712481&single=true&output=csv';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Evita que la app colapse si ocurre un error no controlado en segundo plano
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.dumpErrorToConsole(details);
+  };
+
   runApp(const AppVentasExportPdf());
-}
-class AppVentasExportPdf extends StatelessWidget {
+}class AppVentasExportPdf extends StatelessWidget {
   const AppVentasExportPdf({super.key});
   @override
   Widget build(BuildContext context) {
