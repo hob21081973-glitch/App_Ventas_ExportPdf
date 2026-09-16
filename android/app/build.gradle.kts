@@ -5,25 +5,31 @@ plugins {
 }
 
 android {
-    ...
+    namespace = "com.example.app_ventas_export_pdf"
+    compileSdk = 34
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+
     defaultConfig {
-        applicationId = "com.example.app_ventas_export_pdf" // Tu ID de paquete
-        
-        // 1. IMPORTANTE: minSdk en 21 para soportar SQLite y PDF
-        minSdk = 21 
+        applicationId = "com.example.app_ventas_export_pdf"
+        minSdk = 21
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-        
         multiDexEnabled = true
     }
 
     buildTypes {
         release {
-            // 2. IMPORTANTE: Desactivar minificación para que no borre las librerías nativas
             isMinifyEnabled = false
             isShrinkResources = false
-            
             signingConfig = signingConfigs.getByName("debug")
         }
     }
