@@ -5,29 +5,25 @@ plugins {
 }
 
 android {
-    namespace = "com.example.app_ventas_exportpdf"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
+    ...
     defaultConfig {
-        applicationId = "com.example.app_ventas_exportpdf"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        applicationId = "com.example.app_ventas_export_pdf" // Tu ID de paquete
+        
+        // 1. IMPORTANTE: minSdk en 21 para soportar SQLite y PDF
+        minSdk = 21 
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
+        
+        multiDexEnabled = true
     }
 
     buildTypes {
         release {
+            // 2. IMPORTANTE: Desactivar minificación para que no borre las librerías nativas
+            isMinifyEnabled = false
+            isShrinkResources = false
+            
             signingConfig = signingConfigs.getByName("debug")
         }
     }
