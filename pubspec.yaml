@@ -1,28 +1,31 @@
-name: app_ventas_export_pdf
-description: "Aplicación de ventas con sincronización, base de datos local y exportación a PDF."
-publish_to: 'none' 
+name: app_ventas_exportpdf
+description: "App de Ventas con Exportación a PDF"
+publish_to: 'none'
 version: 1.0.0+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
-  flutter: 
+  flutter:
     sdk: flutter
-  sqflite: ^2.3.0
+  cupertino_icons: ^1.0.6
   path_provider: ^2.1.2
-  permission_handler: ^11.3.0
-  http: ^1.1.0
-  intl: ^0.18.1
-  url_launcher: ^6.1.14
+  sqflite: ^2.3.2
+  http: ^1.2.0
+  intl: ^0.19.0
+  url_launcher: ^6.2.5
   shared_preferences: ^2.2.2
-  pdf: ^3.10.4          # <-- NUEVO: Para crear el diseño del PDF
-  printing: ^5.11.0      # <-- NUEVO: Para previsualizar, compartir e imprimir el PDF
+  pdf: ^3.10.8
+  printing: ^5.12.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.0
+  flutter_lints: ^3.0.0
+
+dependency_overrides:
+  objective_c: 4.5.0
 
 flutter:
   uses-material-design: true
