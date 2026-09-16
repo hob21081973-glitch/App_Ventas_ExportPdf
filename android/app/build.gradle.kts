@@ -1,40 +1,55 @@
-plugins {
-    id("com.android.application")
-    id("kotlin-android")
-    id("dev.flutter.flutter-gradle-plugin")
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.forRoot(localPropertiesFile.newDataInputStream())
 }
 
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+if (flutterVersionCode == null) {
+    flutterVersionCode = '1'
+}
+
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+if (flutterVersionName == null) {
+    flutterVersionName = '1.0'
+}
+
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply plugin: 'dev.flutter.flutter-gradle-plugin'
+
 android {
-    namespace = "com.example.app_ventas_export_pdf"
-    compileSdk = 34
+    namespace "com.example.app_ventas_exportpdf"
+    compileSdkVersion 34
+    ndkVersion flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = '1.8'
     }
 
     defaultConfig {
-        applicationId = "com.example.app_ventas_export_pdf"
-        minSdk = 21
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
-        multiDexEnabled = true
+        applicationId "com.example.app_ventas_exportpdf"
+        minSdkVersion 21
+        targetSdkVersion 34
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+        multiDexEnabled true
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            isShrinkResources = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
         }
     }
 }
 
 flutter {
-    source = "../.."
+    source '../..'
 }
