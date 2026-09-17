@@ -1,4 +1,4 @@
-package com.example.app_ventas_exportpdf
+package com.example.resumen_pedido
 
 import io.flutter.embedding.android.FlutterActivity
 
